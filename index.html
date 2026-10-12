@@ -32,6 +32,7 @@
         <button id="refreshBtn" class="button compact-button" disabled>Refresh</button>
         <button id="downloadAllBtn" class="button secondary compact-button">Download all</button>
       </div>
+      <button id="clearSafariDownloadsBtn" class="button secondary compact-button hidden" style="width:100%; margin-top:6px;">Remove Safari downloads</button>
     </section>
 
     <nav id="tabs" class="tabs" aria-label="Library views">
@@ -251,6 +252,46 @@
           console.error(error);
           alert('Could not remove this song from the device. Nothing else was changed.');
           removeBtn.disabled = false;
+        }
+      });
+    })();
+
+    // Safari-only cleanup for the duplicate offline audio downloaded before the Home Screen app was installed.
+    (() => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (isStandalone) return;
+      const clearBtn = document.getElementById('clearSafariDownloadsBtn');
+      if (!clearBtn) return;
+      clearBtn.classList.remove('hidden');
+
+      clearBtn.addEventListener('click', async () => {
+        const confirmed = confirm(
+          'Remove the old Safari offline song downloads?\n\n' +
+          'This clears only Safari’s duplicate offline audio. It does NOT affect Google Drive or the installed MUSIC Home Screen app.'
+        );
+        if (!confirmed) return;
+
+        clearBtn.disabled = true;
+        try {
+          const db = await new Promise((resolve, reject) => {
+            const request = indexedDB.open('music-pwa-db', 1);
+            request.onsuccess = () => resolve(request.result);
+            request.onerror = () => reject(request.error);
+          });
+          const transaction = db.transaction('audio', 'readwrite');
+          transaction.objectStore('audio').clear();
+          await new Promise((resolve, reject) => {
+            transaction.oncomplete = resolve;
+            transaction.onerror = () => reject(transaction.error);
+            transaction.onabort = () => reject(transaction.error || new Error('Cleanup was cancelled.'));
+          });
+          db.close();
+          alert('Safari duplicate offline downloads removed.');
+          location.reload();
+        } catch (error) {
+          console.error(error);
+          alert('Could not remove the Safari downloads. Nothing else was changed.');
+          clearBtn.disabled = false;
         }
       });
     })();
