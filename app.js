@@ -339,15 +339,24 @@
       els.nowTitle.textContent = track.title;
       els.nowStatus.textContent = source.offline ? 'Playing offline' : 'Playing from Drive';
       els.player.classList.remove('hidden');
-      // Intentionally do not set MediaSession metadata. On iOS with multiple installed
-      // web apps, metadata can contribute to the lock-screen session being associated
-      // with the wrong PWA. Keep the MediaSession transport handlers below.
+      updateMediaSession(track);
       render();
       await els.audio.play();
     } catch (e) {
       console.error(e);
       alert(e.message);
     }
+  }
+
+  function updateMediaSession(track) {
+    if (!('mediaSession' in navigator)) return;
+    try {
+      navigator.mediaSession.metadata = new MediaMetadata({
+        title: track.title,
+        artist: 'MUSIC',
+        album: currentView === 'ALL' ? 'Library' : currentView
+      });
+    } catch {}
   }
 
   function queueIndex() { return queue.indexOf(currentTrackId); }
