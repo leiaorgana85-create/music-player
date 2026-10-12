@@ -1,6 +1,6 @@
-const CACHE = 'music-shell-v5';
+const CACHE = 'music-shell-v6';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js?v=4', './manifest.json'
+  './', './index.html', './styles.css', './app.js?v=5', './manifest.json'
 ];
 
 self.addEventListener('install', event => {
@@ -29,7 +29,7 @@ self.addEventListener('fetch', event => {
       return res;
     }).catch(async () => {
       if (req.mode === 'navigate') return caches.match('./index.html');
-      return (await caches.match(req)) || caches.match(url.pathname.endsWith('/app.js') ? './app.js?v=4' : req);
+      return (await caches.match(req)) || caches.match(url.pathname.endsWith('/app.js') ? './app.js?v=5' : req);
     })
   );
 });
