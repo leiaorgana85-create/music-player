@@ -1,9 +1,10 @@
-const CACHE = 'music-shell-v25';
-const OFFLINE_HTML = './index.html?v=22';
+const CACHE = 'music-shell-v26';
+const OFFLINE_HTML = './index.html?v=23';
 const APP_JS = './app.js?v=16';
 const META_JS = './metadata.js?v=1';
-const STYLES = './styles.css?v=17';
-const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, './manifest.json'];
+const PLAYER_UI_JS = './player-ui.js?v=1';
+const STYLES = './styles.css?v=18';
+const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, PLAYER_UI_JS, './manifest.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -38,6 +39,7 @@ self.addEventListener('fetch', event => {
     }).catch(async () => {
       if (url.pathname.endsWith('/app.js')) return caches.match(APP_JS);
       if (url.pathname.endsWith('/metadata.js')) return caches.match(META_JS);
+      if (url.pathname.endsWith('/player-ui.js')) return caches.match(PLAYER_UI_JS);
       if (url.pathname.endsWith('/styles.css')) return caches.match(STYLES);
       return caches.match(req);
     })
