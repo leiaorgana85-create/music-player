@@ -36,7 +36,14 @@ h2 { font-size: 18px; margin: 0 0 3px; }
 .tabs { display: flex; overflow-x: auto; gap: 6px; padding: 7px 0 7px; scrollbar-width: none; }
 .tabs::-webkit-scrollbar { display: none; }
 .tab { white-space: nowrap; border: 1px solid var(--border); background: transparent; border-radius: 999px; padding: 7px 10px; font-size: 11px; font-weight: 700; color: var(--muted); }
-.tab.active { background: var(--text); color: var(--bg); border-color: var(--text); }
+.tab[data-view="ALL"] { border-color: #56565f; color: #c9c9cf; background: rgba(255,255,255,.04); }
+.tab[data-view="GYM"] { border-color: #3f8f66; color: #83dda8; background: rgba(63,143,102,.14); }
+.tab[data-view="FEEL GOOD"] { border-color: #a76f2b; color: #ffc978; background: rgba(167,111,43,.14); }
+.tab[data-view="BOSSA"] { border-color: #526fae; color: #9dbdff; background: rgba(82,111,174,.14); }
+.tab[data-view="ALL"].active { background: #e7e7ea; color: #0b0b0c; border-color: #e7e7ea; }
+.tab[data-view="GYM"].active { background: #83dda8; color: #0b0b0c; border-color: #83dda8; }
+.tab[data-view="FEEL GOOD"].active { background: #ffc978; color: #0b0b0c; border-color: #ffc978; }
+.tab[data-view="BOSSA"].active { background: #9dbdff; color: #0b0b0c; border-color: #9dbdff; }
 .view-header { display: flex; align-items: end; justify-content: space-between; gap: 10px; margin: 1px 0 7px; }
 .view-actions { display: flex; gap: 6px; }
 .muted { color: var(--muted); font-size: 11px; }
@@ -59,10 +66,10 @@ h2 { font-size: 18px; margin: 0 0 3px; }
 .track-row.selecting .select-glyph { display: inline; color: var(--text); }
 .track-row.selecting .track-menu { visibility: hidden; }
 .track-body { min-width: 0; padding: 4px 6px; text-align: left; }
-.track-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 14px; font-weight: 560; }
+.track-title { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; font-weight: 560; }
 .track-meta { display: none; }
 .track-menu { font-size: 22px; color: var(--muted); height: 40px; }
-.offline-badge { display: none; color: var(--muted); opacity: .65; font-size: 12px; text-align: center; }
+.offline-badge { display: none; color: var(--muted); opacity: .7; font-size: 12px; text-align: center; }
 .offline-badge.visible { display: inline; }
 .empty-state { color: var(--muted); text-align: center; padding: 40px 0; }
 .hidden { display: none !important; }
