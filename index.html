@@ -10,6 +10,7 @@
   <link rel="manifest" href="manifest.json" />
   <link rel="stylesheet" href="styles.css" />
   <title>MUSIC</title>
+  <script>window.__musicBootStart = performance.now();</script>
   <script src="https://accounts.google.com/gsi/client" defer data-google-identity="1"></script>
 </head>
 <body>
@@ -23,26 +24,22 @@
     </header>
 
     <section id="statusCard" class="status-card">
-      <div>
+      <div class="status-copy">
         <div id="connectionLabel" class="status-title">Offline library</div>
         <div id="statusDetail" class="status-detail">Loading saved songs…</div>
       </div>
       <div class="status-actions">
-        <button id="connectBtn" class="button secondary">Connect Drive</button>
-        <button id="refreshBtn" class="button" disabled>Refresh</button>
+        <button id="connectBtn" class="button secondary compact-button">Connect Drive</button>
+        <button id="refreshBtn" class="button compact-button" disabled>Refresh</button>
+        <button id="downloadAllBtn" class="button secondary compact-button">Download all</button>
       </div>
-    </section>
-
-    <section class="toolbar">
-      <input id="searchInput" type="search" placeholder="Search songs" autocomplete="off" />
-      <button id="downloadAllBtn" class="button secondary">Download all</button>
     </section>
 
     <nav id="tabs" class="tabs" aria-label="Library views">
       <button class="tab active" data-view="ALL">ALL</button>
-      <button class="tab" data-view="GYM">GYM</button>
-      <button class="tab" data-view="CHILL">CHILL</button>
-      <button class="tab" data-view="BOSSANOVA">BOSSANOVA</button>
+      <button class="tab" data-view="1 - GYM">1 - GYM</button>
+      <button class="tab" data-view="2 - FEEL GOOD">2 - FEEL GOOD</button>
+      <button class="tab" data-view="3 - BOSSA">3 - BOSSA</button>
     </nav>
 
     <main>
@@ -51,8 +48,21 @@
           <h2 id="viewTitle">All songs</h2>
           <div id="viewCount" class="muted">0 songs</div>
         </div>
-        <button id="shuffleBtn" class="small-control" aria-pressed="false">Shuffle</button>
+        <div class="view-actions">
+          <button id="selectBtn" class="small-control">Select</button>
+          <button id="shuffleBtn" class="small-control" aria-pressed="false">Shuffle</button>
+        </div>
       </div>
+
+      <div id="bulkBar" class="bulk-bar hidden">
+        <span id="selectedCount">0 selected</span>
+        <div class="bulk-actions">
+          <button id="bulkAddBtn" class="button compact-button">Add to playlist</button>
+          <button id="bulkRemoveBtn" class="button secondary compact-button">Remove from playlist</button>
+          <button id="bulkCancelBtn" class="button secondary compact-button">Cancel</button>
+        </div>
+      </div>
+
       <div id="progressMessage" class="progress-message hidden"></div>
       <div id="trackList" class="track-list"></div>
       <div id="emptyState" class="empty-state hidden">No songs here yet.</div>
@@ -80,7 +90,7 @@
 
   <dialog id="playlistDialog" class="dialog">
     <form method="dialog">
-      <div class="dialog-title">Playlists</div>
+      <div id="playlistDialogTitle" class="dialog-title">Playlists</div>
       <div id="playlistChoices" class="playlist-choices"></div>
       <div class="dialog-actions">
         <button value="cancel" class="button secondary">Cancel</button>
@@ -110,9 +120,10 @@
 
   <template id="trackTemplate">
     <div class="track-row">
-      <button class="track-play" aria-label="Play">
+      <button class="track-play" aria-label="Play or select">
         <span class="track-index"></span>
         <span class="play-glyph">▶</span>
+        <span class="select-glyph">○</span>
       </button>
       <button class="track-body">
         <span class="track-title"></span>
@@ -159,6 +170,6 @@
       };
     })();
   </script>
-  <script src="app.js?v=8" defer></script>
+  <script src="app.js?v=9" defer></script>
 </body>
 </html>
