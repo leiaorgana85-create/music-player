@@ -79,7 +79,6 @@
   }
 
   async function dbGetAll(store) { return reqP(tx(store).getAll()); }
-  async function dbGetAllKeys(store) { return reqP(tx(store).getAllKeys()); }
   async function dbGet(store, key) { return reqP(tx(store).get(key)); }
   async function dbPut(store, value) { return reqP(tx(store, 'readwrite').put(value)); }
   async function dbDelete(store, key) { return reqP(tx(store, 'readwrite').delete(key)); }
@@ -106,9 +105,7 @@
 
   async function loadSavedLibrary() {
     library = (await dbGetAll('library')).sort((a, b) => a.name.localeCompare(b.name));
-    // Only read the audio-store keys at startup. Reading every audio record here would
-    // deserialize every downloaded song (hundreds of MB) just to discover which IDs exist.
-    offlineIds = new Set(await dbGetAllKeys('audio'));
+    offlineIds = new Set((await dbGetAll('audio')).map(x => x.id));
     prunePlaylists();
     render();
     const offlineCount = offlineIds.size;
