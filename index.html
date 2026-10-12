@@ -123,6 +123,23 @@
     </div>
   </template>
 
-  <script src="app.js?v=2" defer></script>
+  <script>
+    // WebKit/Safari can reject Blob/File objects when they are written to IndexedDB.
+    // Store a structured-clone-safe ArrayBuffer wrapper instead and reconstruct a Blob only for playback.
+    (() => {
+      const nativeCreateObjectURL = URL.createObjectURL.bind(URL);
+      Response.prototype.blob = async function () {
+        const type = this.headers.get('content-type') || 'application/octet-stream';
+        return { __musicBytes: await this.arrayBuffer(), type };
+      };
+      URL.createObjectURL = function (value) {
+        if (value && value.__musicBytes instanceof ArrayBuffer) {
+          return nativeCreateObjectURL(new Blob([value.__musicBytes], { type: value.type || 'application/octet-stream' }));
+        }
+        return nativeCreateObjectURL(value);
+      };
+    })();
+  </script>
+  <script src="app.js?v=3" defer></script>
 </body>
 </html>
