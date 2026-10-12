@@ -1,6 +1,6 @@
-const CACHE = 'music-shell-v14';
-const OFFLINE_HTML = './index.html?v=11';
-const APP_JS = './app.js?v=10';
+const CACHE = 'music-shell-v15';
+const OFFLINE_HTML = './index.html?v=12';
+const APP_JS = './app.js?v=11';
 const STYLES = './styles.css?v=10';
 const SHELL = [OFFLINE_HTML, STYLES, APP_JS, './manifest.json'];
 
