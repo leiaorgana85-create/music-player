@@ -124,6 +124,25 @@
   </template>
 
   <script>
+    // Personal app defaults. OAuth Client IDs are public identifiers, not secrets.
+    (() => {
+      const key = 'musicPwaSettings';
+      const defaults = {
+        clientId: '543436064136-27a477uk691qocpaft25q925lg88hl98.apps.googleusercontent.com',
+        folderId: '1W8s8gT5p60nOqXv_VvPy6l9uofZAog9E'
+      };
+      try {
+        const saved = JSON.parse(localStorage.getItem(key) || '{}');
+        localStorage.setItem(key, JSON.stringify({
+          ...saved,
+          clientId: saved.clientId || defaults.clientId,
+          folderId: saved.folderId || defaults.folderId
+        }));
+      } catch {
+        localStorage.setItem(key, JSON.stringify(defaults));
+      }
+    })();
+
     // WebKit/Safari can reject Blob/File objects when they are written to IndexedDB.
     // Store a structured-clone-safe ArrayBuffer wrapper instead and reconstruct a Blob only for playback.
     (() => {
@@ -140,6 +159,6 @@
       };
     })();
   </script>
-  <script src="app.js?v=3" defer></script>
+  <script src="app.js?v=4" defer></script>
 </body>
 </html>
