@@ -34,12 +34,12 @@
   let settings = loadSettings();
   let accessToken = null;
   let tokenClient = null;
-  let currentView = 'ALL';
+  let currentView = 'GYM';
   let currentTrackId = null;
   let currentObjectUrl = null;
   let queue = [];
-  let shuffle = false;
-  let repeatMode = 'off'; // off | all | one
+  let shuffle = true;
+  let repeatMode = 'all'; // off | all | one
   let dialogTrackIds = [];
   let dialogMode = 'single'; // single | add
   let seekDragging = false;
