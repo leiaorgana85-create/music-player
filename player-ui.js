@@ -12,9 +12,13 @@
   function setTransportIcon(button, direction) {
     if (!button) return;
     const previous = direction === 'previous';
+    button.style.color = '#ffffff';
+    button.style.webkitTextFillColor = '#ffffff';
+    button.style.webkitAppearance = 'none';
+    button.style.appearance = 'none';
     button.innerHTML = previous
-      ? '<svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true" focusable="false"><rect x="5" y="6" width="2" height="12" rx="1" fill="currentColor"></rect><path d="M17 6.5 9.5 12 17 17.5V6.5Z" fill="currentColor"></path></svg>'
-      : '<svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true" focusable="false"><path d="M7 6.5 14.5 12 7 17.5V6.5Z" fill="currentColor"></path><rect x="17" y="6" width="2" height="12" rx="1" fill="currentColor"></rect></svg>';
+      ? '<svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true" focusable="false" style="display:block;margin:auto"><rect x="5" y="6" width="2" height="12" rx="1" fill="#ffffff"></rect><path d="M17 6.5 9.5 12 17 17.5V6.5Z" fill="#ffffff"></path></svg>'
+      : '<svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true" focusable="false" style="display:block;margin:auto"><path d="M7 6.5 14.5 12 7 17.5V6.5Z" fill="#ffffff"></path><rect x="17" y="6" width="2" height="12" rx="1" fill="#ffffff"></rect></svg>';
   }
 
   setTransportIcon(prevBtn, 'previous');
