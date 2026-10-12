@@ -6,6 +6,20 @@
   const nowTitle = document.getElementById('nowTitle');
   if (!playerMain || !audio || !nowTitle) return;
 
+  const prevBtn = document.getElementById('prevBtn');
+  const nextBtn = document.getElementById('nextBtn');
+
+  function setTransportIcon(button, direction) {
+    if (!button) return;
+    const previous = direction === 'previous';
+    button.innerHTML = previous
+      ? '<svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true" focusable="false"><rect x="5" y="6" width="2" height="12" rx="1" fill="currentColor"></rect><path d="M17 6.5 9.5 12 17 17.5V6.5Z" fill="currentColor"></path></svg>'
+      : '<svg viewBox="0 0 24 24" width="27" height="27" aria-hidden="true" focusable="false"><path d="M7 6.5 14.5 12 7 17.5V6.5Z" fill="currentColor"></path><rect x="17" y="6" width="2" height="12" rx="1" fill="currentColor"></rect></svg>';
+  }
+
+  setTransportIcon(prevBtn, 'previous');
+  setTransportIcon(nextBtn, 'next');
+
   const artworkWrap = document.createElement('div');
   artworkWrap.id = 'nowArtworkWrap';
   artworkWrap.className = 'now-artwork-wrap no-art';
