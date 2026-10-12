@@ -2,11 +2,11 @@
   'use strict';
 
   const DEFAULT_FOLDER_ID = '1W8s8gT5p60nOqXv_VvPy6l9uofZAog9E';
-  const PLAYLIST_NAMES = ['1 - GYM', '2 - FEEL GOOD', '3 - BOSSA'];
+  const PLAYLIST_NAMES = ['GYM', 'FEEL GOOD', 'BOSSA'];
   const PLAYLIST_ALIASES = {
-    '1 - GYM': ['1 - GYM', 'GYM'],
-    '2 - FEEL GOOD': ['2 - FEEL GOOD', 'FEEL GOOD', 'CHILL'],
-    '3 - BOSSA': ['3 - BOSSA', 'BOSSA', 'BOSSANOVA']
+    'GYM': ['GYM', '1 - GYM'],
+    'FEEL GOOD': ['FEEL GOOD', '2 - FEEL GOOD', 'CHILL'],
+    'BOSSA': ['BOSSA', '3 - BOSSA', 'BOSSANOVA']
   };
   const SUPPORTED_MIMES = new Set(['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/flac', 'audio/x-flac']);
   const DB_NAME = 'music-pwa-db';
@@ -24,7 +24,7 @@
   };
 
   const els = Object.fromEntries([
-    'audio','connectionLabel','statusDetail','connectBtn','refreshBtn','settingsBtn','downloadAllBtn','tabs','viewTitle','viewCount','shuffleBtn','selectBtn','bulkBar','selectedCount','bulkAddBtn','bulkRemoveBtn','bulkCancelBtn','progressMessage','trackList','emptyState','player','nowTitle','nowStatus','playerPlaylistBtn','seek','prevBtn','playBtn','nextBtn','repeatBtn','playlistDialog','playlistDialogTitle','playlistChoices','savePlaylistsBtn','settingsDialog','settingsForm','clientIdInput','folderIdInput','saveSettingsBtn','trackTemplate'
+    'audio','connectionLabel','statusDetail','connectBtn','refreshBtn','settingsBtn','searchInput','downloadAllBtn','tabs','viewTitle','viewCount','shuffleBtn','selectBtn','bulkBar','selectedCount','bulkAddBtn','bulkRemoveBtn','bulkCancelBtn','progressMessage','trackList','emptyState','player','nowTitle','nowStatus','playerPlaylistBtn','seek','prevBtn','playBtn','nextBtn','repeatBtn','playlistDialog','playlistDialogTitle','playlistChoices','savePlaylistsBtn','settingsDialog','settingsForm','clientIdInput','folderIdInput','saveSettingsBtn','trackTemplate'
   ].map(id => [id, document.getElementById(id)]));
 
   let db;
@@ -119,6 +119,14 @@
     return x >= 1024 * 1024 ? `${(x / 1024 / 1024).toFixed(1)} MB` : `${Math.round(x / 1024)} KB`;
   }
 
+  function newestTimestamp(track) {
+    return Date.parse(track.createdTime || track.modifiedTime || '') || 0;
+  }
+
+  function sortLibrary() {
+    library.sort((a, b) => newestTimestamp(b) - newestTimestamp(a) || a.name.localeCompare(b.name));
+  }
+
   function secs(ms) {
     return `${(ms / 1000).toFixed(1)}s`;
   }
@@ -139,7 +147,8 @@
 
   async function loadSavedLibrary(timing = null) {
     let mark = performance.now();
-    library = (await dbGetAll('library')).sort((a, b) => a.name.localeCompare(b.name));
+    library = await dbGetAll('library');
+    sortLibrary();
     if (timing) timing.libraryRead = performance.now() - mark;
 
     mark = performance.now();
@@ -235,7 +244,7 @@
     let pageToken = '';
     do {
       const q = encodeURIComponent(`'${folderId}' in parents and trashed=false`);
-      const fields = encodeURIComponent('nextPageToken,files(id,name,mimeType,size,modifiedTime)');
+      const fields = encodeURIComponent('nextPageToken,files(id,name,mimeType,size,createdTime,modifiedTime)');
       const page = pageToken ? `&pageToken=${encodeURIComponent(pageToken)}` : '';
       const url = `https://www.googleapis.com/drive/v3/files?q=${q}&fields=${fields}&pageSize=1000&orderBy=name${page}`;
       const json = await (await driveFetch(url)).json();
@@ -273,6 +282,7 @@
           title: cleanTitle(f.name),
           mimeType: f.mimeType,
           size: Number(f.size || 0),
+          createdTime: f.createdTime || old?.createdTime || null,
           modifiedTime: f.modifiedTime || null
         });
       }
@@ -323,9 +333,12 @@
   }
 
   function currentTracks() {
-    return currentView === 'ALL'
+    let rows = currentView === 'ALL'
       ? [...library]
       : playlists[currentView].map(id => library.find(t => t.id === id)).filter(Boolean);
+    const q = els.searchInput.value.trim().toLowerCase();
+    if (q) rows = rows.filter(t => t.title.toLowerCase().includes(q));
+    return rows;
   }
 
   function updateBulkBar() {
@@ -554,6 +567,7 @@
 
     els.refreshBtn.addEventListener('click', refreshFromDrive);
     els.downloadAllBtn.addEventListener('click', downloadAll);
+    els.searchInput.addEventListener('input', render);
 
     els.tabs.addEventListener('click', e => {
       const tab = e.target.closest('.tab');
