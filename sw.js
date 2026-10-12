@@ -1,8 +1,9 @@
-const CACHE = 'music-shell-v22';
-const OFFLINE_HTML = './index.html?v=19';
-const APP_JS = './app.js?v=14';
-const STYLES = './styles.css?v=15';
-const SHELL = [OFFLINE_HTML, STYLES, APP_JS, './manifest.json'];
+const CACHE = 'music-shell-v23';
+const OFFLINE_HTML = './index.html?v=20';
+const APP_JS = './app.js?v=15';
+const META_JS = './metadata.js?v=1';
+const STYLES = './styles.css?v=16';
+const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, './manifest.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -36,6 +37,7 @@ self.addEventListener('fetch', event => {
       return res;
     }).catch(async () => {
       if (url.pathname.endsWith('/app.js')) return caches.match(APP_JS);
+      if (url.pathname.endsWith('/metadata.js')) return caches.match(META_JS);
       if (url.pathname.endsWith('/styles.css')) return caches.match(STYLES);
       return caches.match(req);
     })
