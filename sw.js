@@ -1,12 +1,11 @@
-const CACHE = 'music-shell-v32';
+const CACHE = 'music-shell-v33';
 const OFFLINE_HTML = './index.html?v=23';
 const APP_JS = './app.js?v=16';
 const META_JS = './metadata.js?v=1';
-const PLAYER_UI_JS = './player-ui.js?v=5';
+const PLAYER_UI_JS = './player-ui.js?v=6';
 const PLAYLIST_JS = './playlist-enhancements.js?v=3';
-const SETTINGS_UI_JS = './settings-ui.js?v=1';
 const STYLES = './styles.css?v=18';
-const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, SETTINGS_UI_JS, './manifest.json'];
+const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, './manifest.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -41,10 +40,6 @@ self.addEventListener('fetch', event => {
   }
   if (url.pathname.endsWith('/playlist-enhancements.js')) {
     event.respondWith(caches.match(PLAYLIST_JS));
-    return;
-  }
-  if (url.pathname.endsWith('/settings-ui.js')) {
-    event.respondWith(caches.match(SETTINGS_UI_JS));
     return;
   }
 
