@@ -1,5 +1,5 @@
-const CACHE = 'music-shell-v23';
-const OFFLINE_HTML = './index.html?v=20';
+const CACHE = 'music-shell-v24';
+const OFFLINE_HTML = './index.html?v=21';
 const APP_JS = './app.js?v=15';
 const META_JS = './metadata.js?v=1';
 const STYLES = './styles.css?v=16';
