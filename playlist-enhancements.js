@@ -73,7 +73,7 @@
     try {
       const parsed = JSON.parse(localStorage.getItem(CUSTOM_KEY) || '{}');
       if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return {};
-      const clean = {};
+      const clean = Object.create(null);
       for (const [name, ids] of Object.entries(parsed)) {
         if (typeof name === 'string' && name.trim()) clean[name] = safeIds(ids);
       }
@@ -119,9 +119,15 @@
       configurable: true,
       enumerable: false,
       get() {
-        return safeIds(readCustom()[name]);
+        const playlistLike = BUILTIN_PLAYLISTS.every(key => Object.prototype.hasOwnProperty.call(this, key));
+        return playlistLike ? safeIds(readCustom()[name]) : undefined;
       },
       set(value) {
+        const playlistLike = BUILTIN_PLAYLISTS.every(key => Object.prototype.hasOwnProperty.call(this, key));
+        if (!playlistLike) {
+          Object.defineProperty(this, name, { value, writable: true, enumerable: true, configurable: true });
+          return;
+        }
         const data = readCustom();
         data[name] = safeIds(value);
         writeCustom(data);
@@ -177,469 +183,4 @@
     const dialog = document.createElement('dialog');
     dialog.id = id;
     dialog.className = 'dialog playlist-manage-dialog';
-    dialog.innerHTML = `
-      <form method="dialog">
-        <div class="dialog-title">${title}</div>
-        <label class="field"><span>Playlist name</span><input class="playlist-name-input" type="text" maxlength="30" autocomplete="off"></label>
-        <div class="dialog-error help hidden"></div>
-        <div class="dialog-actions">
-          <button value="cancel" class="button secondary">Cancel</button>
-          <button type="button" class="button playlist-save-name">Save</button>
-        </div>
-      </form>`;
-    document.body.appendChild(dialog);
-    return dialog;
-  }
-
-  const newDialog = makeDialog('newPlaylistDialog', 'New playlist');
-  const manageDialog = makeDialog('managePlaylistDialog', 'Playlist settings');
-  const deleteBtn = document.createElement('button');
-  deleteBtn.type = 'button';
-  deleteBtn.className = 'button secondary playlist-delete-btn';
-  deleteBtn.textContent = 'Delete playlist';
-  manageDialog.querySelector('.dialog-actions').prepend(deleteBtn);
-
-  function showDialogError(dialog, message = '') {
-    const el = dialog.querySelector('.dialog-error');
-    el.textContent = message;
-    el.classList.toggle('hidden', !message);
-  }
-
-  function openNewPlaylist() {
-    showDialogError(newDialog, '');
-    const input = newDialog.querySelector('.playlist-name-input');
-    input.value = '';
-    newDialog.showModal();
-    setTimeout(() => input.focus(), 20);
-  }
-
-  function createPlaylist() {
-    try {
-      const input = newDialog.querySelector('.playlist-name-input');
-      const name = validateName(input.value);
-      const data = readCustom();
-      data[name] = [];
-      writeCustom(data);
-      installAccessor(name);
-      renderCustomTabs();
-      newDialog.close();
-      setTimeout(() => tabs.querySelector(`.custom-playlist-tab[data-view="${CSS.escape(name)}"]`)?.click(), 0);
-    } catch (error) {
-      showDialogError(newDialog, error.message);
-    }
-  }
-
-  function openManagePlaylist() {
-    const view = activeView();
-    if (!isCustom(view)) return;
-    showDialogError(manageDialog, '');
-    const input = manageDialog.querySelector('.playlist-name-input');
-    input.value = view;
-    manageDialog.dataset.originalName = view;
-    manageDialog.showModal();
-    setTimeout(() => input.select(), 20);
-  }
-
-  function renamePlaylist() {
-    const oldName = manageDialog.dataset.originalName || '';
-    if (!isCustom(oldName)) return manageDialog.close();
-    try {
-      const input = manageDialog.querySelector('.playlist-name-input');
-      const newName = validateName(input.value, oldName);
-      if (newName === oldName) return manageDialog.close();
-      const old = readCustom();
-      const next = {};
-      for (const [name, ids] of Object.entries(old)) next[name === oldName ? newName : name] = ids;
-      writeCustom(next);
-      uninstallAccessor(oldName);
-      installAccessor(newName);
-      renderCustomTabs();
-      manageDialog.close();
-      setTimeout(() => tabs.querySelector(`.custom-playlist-tab[data-view="${CSS.escape(newName)}"]`)?.click(), 0);
-    } catch (error) {
-      showDialogError(manageDialog, error.message);
-    }
-  }
-
-  function deletePlaylist() {
-    const name = manageDialog.dataset.originalName || '';
-    if (!isCustom(name)) return;
-    if (!confirm(`Delete playlist â€œ${name}â€?\n\nThe songs and offline audio will not be deleted.`)) return;
-    const data = readCustom();
-    delete data[name];
-    writeCustom(data);
-    uninstallAccessor(name);
-    manageDialog.close();
-    renderCustomTabs();
-    tabs.querySelector('.tab[data-view="GYM"]')?.click();
-  }
-
-  newDialog.querySelector('.playlist-save-name').addEventListener('click', createPlaylist);
-  manageDialog.querySelector('.playlist-save-name').addEventListener('click', renamePlaylist);
-  deleteBtn.addEventListener('click', deletePlaylist);
-  for (const dialog of [newDialog, manageDialog]) {
-    dialog.querySelector('.playlist-name-input').addEventListener('keydown', event => {
-      if (event.key !== 'Enter') return;
-      event.preventDefault();
-      dialog === newDialog ? createPlaylist() : renamePlaylist();
-    });
-  }
-
-  const orderBtn = document.createElement('button');
-  orderBtn.type = 'button';
-  orderBtn.id = 'playlistOrderBtn';
-  orderBtn.className = 'small-control playlist-order-btn hidden';
-  orderBtn.textContent = 'Order';
-
-  const manageBtn = document.createElement('button');
-  manageBtn.type = 'button';
-  manageBtn.id = 'playlistManageBtn';
-  manageBtn.className = 'small-control hidden';
-  manageBtn.textContent = 'Edit';
-
-  viewActions.insertBefore(manageBtn, selectBtn);
-  viewActions.insertBefore(orderBtn, selectBtn);
-
-  function updateHeaderControls() {
-    const view = activeView();
-    orderBtn.classList.toggle('hidden', !isPlaylist(view));
-    manageBtn.classList.toggle('hidden', !isCustom(view));
-  }
-
-  function readBuiltinPlaylists() {
-    try {
-      const parsed = JSON.parse(localStorage.getItem(PLAYLISTS_KEY) || '{}');
-      return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? parsed : {};
-    } catch {
-      return {};
-    }
-  }
-
-  function writeBuiltinPlaylists(data) {
-    localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(data));
-  }
-
-  function reorderStored(view, id, direction) {
-    let ids;
-    if (isCustom(view)) {
-      const data = readCustom();
-      ids = safeIds(data[view]);
-      const index = ids.indexOf(id);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= ids.length) return false;
-      [ids[index], ids[target]] = [ids[target], ids[index]];
-      data[view] = ids;
-      writeCustom(data);
-      return true;
-    }
-    if (BUILTIN_PLAYLISTS.includes(view)) {
-      const data = readBuiltinPlaylists();
-      ids = safeIds(data[view]);
-      const index = ids.indexOf(id);
-      const target = index + direction;
-      if (index < 0 || target < 0 || target >= ids.length) return false;
-      [ids[index], ids[target]] = [ids[target], ids[index]];
-      data[view] = ids;
-      writeBuiltinPlaylists(data);
-      return true;
-    }
-    return false;
-  }
-
-  function refreshOrderControls() {
-    const rows = [...trackList.querySelectorAll('.track-row')];
-    rows.forEach((row, index) => {
-      row.querySelector('.order-up')?.toggleAttribute('disabled', index === 0);
-      row.querySelector('.order-down')?.toggleAttribute('disabled', index === rows.length - 1);
-      const indexEl = row.querySelector('.track-index');
-      if (indexEl) indexEl.textContent = String(index + 1);
-    });
-  }
-
-  function moveRow(row, direction) {
-    const id = row?.dataset?.id;
-    if (!id || !reorderStored(reorderView, id, direction)) return;
-    if (direction < 0) {
-      const prev = row.previousElementSibling;
-      if (prev) trackList.insertBefore(row, prev);
-    } else {
-      const next = row.nextElementSibling;
-      if (next) trackList.insertBefore(next, row);
-    }
-    orderDirty = true;
-    refreshOrderControls();
-  }
-
-  function decorateReorderRows() {
-    if (!reorderMode) return;
-    const rows = [...trackList.querySelectorAll('.track-row')];
-    for (const row of rows) {
-      row.classList.add('plugin-reordering');
-      if (row.querySelector('.manual-order-controls')) continue;
-      const controls = document.createElement('div');
-      controls.className = 'manual-order-controls';
-      const up = document.createElement('button');
-      up.type = 'button';
-      up.className = 'order-up';
-      up.textContent = 'â†‘';
-      up.setAttribute('aria-label', 'Move song up');
-      const down = document.createElement('button');
-      down.type = 'button';
-      down.className = 'order-down';
-      down.textContent = 'â†“';
-      down.setAttribute('aria-label', 'Move song down');
-      up.addEventListener('click', () => moveRow(row, -1));
-      down.addEventListener('click', () => moveRow(row, 1));
-      controls.append(up, down);
-      row.appendChild(controls);
-    }
-    refreshOrderControls();
-  }
-
-  function beginReorder() {
-    const view = activeView();
-    if (!isPlaylist(view)) return;
-    if (!bulkBar?.classList.contains('hidden')) selectBtn.click();
-    if (searchInput?.value) {
-      searchInput.value = '';
-      searchInput.dispatchEvent(new Event('input', { bubbles: true }));
-    }
-    reorderMode = true;
-    reorderView = view;
-    orderDirty = false;
-    document.body.classList.add('playlist-reordering');
-    orderBtn.textContent = 'Done';
-    orderBtn.classList.add('active-order');
-    searchInput?.setAttribute('disabled', '');
-    decorateReorderRows();
-  }
-
-  function finishReorder(restoreView = reorderView) {
-    if (!reorderMode) return;
-    reorderMode = false;
-    document.body.classList.remove('playlist-reordering');
-    orderBtn.textContent = 'Order';
-    orderBtn.classList.remove('active-order');
-    searchInput?.removeAttribute('disabled');
-    if (orderDirty) {
-      sessionStorage.setItem(RESTORE_VIEW_KEY, restoreView || 'GYM');
-      location.reload();
-      return;
-    }
-    trackList.querySelectorAll('.track-row').forEach(row => {
-      row.classList.remove('plugin-reordering');
-      row.querySelector('.manual-order-controls')?.remove();
-    });
-    updateHeaderControls();
-  }
-
-  orderBtn.addEventListener('click', () => reorderMode ? finishReorder() : beginReorder());
-  manageBtn.addEventListener('click', openManagePlaylist);
-
-  tabs.addEventListener('click', event => {
-    const add = event.target.closest('.playlist-add-tab');
-    if (add) {
-      if (reorderMode) {
-        event.preventDefault();
-        event.stopImmediatePropagation();
-        if (orderDirty) {
-          sessionStorage.setItem(RESTORE_VIEW_KEY, reorderView || 'GYM');
-          location.reload();
-        } else {
-          finishReorder();
-          openNewPlaylist();
-        }
-        return;
-      }
-      openNewPlaylist();
-      return;
-    }
-    const tab = event.target.closest('.tab[data-view]');
-    if (!tab) return;
-    if (reorderMode && tab.dataset.view !== reorderView) {
-      event.preventDefault();
-      event.stopImmediatePropagation();
-      const targetView = tab.dataset.view;
-      if (orderDirty) {
-        sessionStorage.setItem(RESTORE_VIEW_KEY, targetView);
-        location.reload();
-      } else {
-        finishReorder();
-        setTimeout(() => tabs.querySelector(`.tab[data-view="${CSS.escape(targetView)}"]`)?.click(), 0);
-      }
-      return;
-    }
-    setTimeout(updateHeaderControls, 0);
-  }, true);
-
-  const listObserver = new MutationObserver(() => {
-    const playing = trackList.querySelector('.track-row.playing');
-    if (playing?.dataset?.id) lastPlayingId = playing.dataset.id;
-    if (reorderMode) requestAnimationFrame(decorateReorderRows);
-  });
-  listObserver.observe(trackList, { childList: true, subtree: false });
-
-  document.addEventListener('click', event => {
-    const menu = event.target.closest('.track-menu');
-    if (menu) {
-      const id = menu.closest('.track-row')?.dataset?.id;
-      if (id) pendingDialog = { mode: 'single', ids: [id] };
-      return;
-    }
-    if (event.target.closest('#bulkAddBtn')) {
-      const ids = [...trackList.querySelectorAll('.track-row.selected')].map(row => row.dataset.id).filter(Boolean);
-      pendingDialog = { mode: 'add', ids };
-      return;
-    }
-    if (playerPlaylistBtn && event.target.closest('#playerPlaylistBtn')) {
-      const id = trackList.querySelector('.track-row.playing')?.dataset?.id || lastPlayingId;
-      if (id) pendingDialog = { mode: 'single', ids: [id] };
-    }
-  }, true);
-
-  function augmentPlaylistChoices() {
-    if (!playlistChoices || !playlistDialog?.open) return;
-    playlistChoices.querySelectorAll('.custom-playlist-choice').forEach(node => node.remove());
-    const data = readCustom();
-    const id = pendingDialog.ids[0];
-    for (const name of Object.keys(data)) {
-      const label = document.createElement('label');
-      label.className = 'playlist-choice custom-playlist-choice';
-      const cb = document.createElement('input');
-      cb.type = 'checkbox';
-      cb.value = name;
-      cb.dataset.customPlaylist = '1';
-      cb.checked = pendingDialog.mode === 'single' && !!id && safeIds(data[name]).includes(id);
-      const span = document.createElement('span');
-      span.textContent = name;
-      label.append(cb, span);
-      playlistChoices.appendChild(label);
-    }
-  }
-
-  if (playlistDialog) {
-    new MutationObserver(() => {
-      if (playlistDialog.open) augmentPlaylistChoices();
-    }).observe(playlistDialog, { attributes: true, attributeFilter: ['open'] });
-  }
-
-  savePlaylistsBtn?.addEventListener('click', () => {
-    if (!pendingDialog.ids.length) return;
-    const data = readCustom();
-    const checked = new Set([...playlistChoices.querySelectorAll('input[data-custom-playlist="1"]:checked')].map(cb => cb.value));
-    for (const name of Object.keys(data)) {
-      const set = new Set(safeIds(data[name]));
-      if (pendingDialog.mode === 'add') {
-        if (checked.has(name)) pendingDialog.ids.forEach(id => set.add(id));
-      } else {
-        const id = pendingDialog.ids[0];
-        if (checked.has(name)) set.add(id); else set.delete(id);
-      }
-      data[name] = [...set];
-    }
-    writeCustom(data);
-    pendingDialog = { mode: 'single', ids: [] };
-  });
-
-  removeDeviceBtn?.addEventListener('click', () => {
-    const id = pendingDialog.ids[0] || trackList.querySelector('.track-row.playing')?.dataset?.id || lastPlayingId;
-    if (!id) return;
-    const data = readCustom();
-    for (const name of Object.keys(data)) data[name] = safeIds(data[name]).filter(trackId => trackId !== id);
-    writeCustom(data);
-  }, true);
-
-  async function exportEnhancedBackup(event) {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    const builtins = readBuiltinPlaylists();
-    const custom = readCustom();
-    const playlists = {};
-    for (const name of BUILTIN_PLAYLISTS) playlists[name] = safeIds(builtins[name]);
-    for (const [name, ids] of Object.entries(custom)) playlists[name] = safeIds(ids);
-    let favorites = [];
-    try { favorites = safeIds(JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]')); } catch {}
-    const payload = {
-      app: 'Lexi Music',
-      version: BACKUP_VERSION,
-      exportedAt: new Date().toISOString(),
-      playlists,
-      customPlaylistNames: Object.keys(custom),
-      favorites
-    };
-    const filename = `lexi-music-playlists-${new Date().toISOString().slice(0, 10)}.json`;
-    const text = JSON.stringify(payload, null, 2);
-    const file = new File([text], filename, { type: 'application/json' });
-    try {
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Lexi Music playlist backup' });
-        return;
-      }
-    } catch (error) {
-      if (error?.name === 'AbortError') return;
-    }
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  async function importEnhancedBackup(file) {
-    if (!file) return;
-    try {
-      const parsed = JSON.parse(await file.text());
-      if (!parsed || typeof parsed !== 'object' || !parsed.playlists) throw new Error('This is not a Lexi Music playlist backup.');
-      const importedBuiltins = {};
-      for (const name of BUILTIN_PLAYLISTS) importedBuiltins[name] = safeIds(parsed.playlists[name]);
-
-      const explicitNames = Array.isArray(parsed.customPlaylistNames) ? parsed.customPlaylistNames : [];
-      const inferredNames = Object.keys(parsed.playlists).filter(name => !BUILTIN_PLAYLISTS.includes(name));
-      const candidates = explicitNames.length ? explicitNames : inferredNames;
-      const importedCustom = {};
-      for (const rawName of candidates) {
-        if (typeof rawName !== 'string') continue;
-        const name = rawName.trim();
-        if (!name || BUILTIN_PLAYLISTS.includes(name) || ['ALL', 'FAVORITES', 'DOWNLOADED'].includes(nameKey(name))) continue;
-        if (Object.prototype.hasOwnProperty.call(Object.prototype, name)) continue;
-        importedCustom[name] = safeIds(parsed.playlists[name]);
-      }
-      const importedFavorites = safeIds(parsed.favorites);
-      if (!confirm('Replace the current playlists and Favorites with this backup? Downloaded songs will not be changed.')) return;
-      writeBuiltinPlaylists(importedBuiltins);
-      writeCustom(importedCustom);
-      localStorage.setItem(FAVORITES_KEY, JSON.stringify(importedFavorites));
-      sessionStorage.setItem(RESTORE_VIEW_KEY, 'GYM');
-      location.reload();
-    } catch (error) {
-      alert(error.message || 'Could not import this playlist backup.');
-    } finally {
-      backupFileInput.value = '';
-    }
-  }
-
-  exportBackupBtn?.addEventListener('click', exportEnhancedBackup, true);
-  importBackupBtn?.addEventListener('click', event => {
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    backupFileInput?.click();
-  }, true);
-  backupFileInput?.addEventListener('change', event => {
-    event.stopImmediatePropagation();
-    importEnhancedBackup(backupFileInput.files?.[0]);
-  }, true);
-
-  installAllAccessors();
-  renderCustomTabs();
-
-  const restore = sessionStorage.getItem(RESTORE_VIEW_KEY);
-  if (restore) {
-    sessionStorage.removeItem(RESTORE_VIEW_KEY);
-    setTimeout(() => tabs.querySelector(`.tab[data-view="${CSS.escape(restore)}"]`)?.click(), 30);
-  } else {
-    updateHeaderControls();
-  }
-})();
+    dial²È="24¡½É‘•É¥ÉÑä¤ì(€€€€€€€Í•ÍÍ¥½¹MÑ½É…”¹Í•Ñ%Ñ•´¡IMQ=I}Y%]}-d°Ñ…É•ÑY¥•Ü¤ì(€€€€€€€±½…Ñ¥½¸¹É•±½… ¤ì(€€€€€ô•±Í”ì(€€€€€€€™¥¹¥Í¡I•½É‘•È ¤ì(€€€€€€€Í•ÑQ¥µ•½ÕÐ  ¤€ôøÑ…‰Ì¹ÅÕ•ÉåM•±•Ñ½È¡€¹Ñ…‰m‘…Ñ„µÙ¥•Üôˆ‘íML¹•Í…Á”¡Ñ…É•ÑY¥•Ü¥ô‰u€¤ü¹±¥¬ ¤°€À¤ì(€€€€€ô(€€€€€É•ÑÕÉ¸ì(€€€ô(€€€Í•ÑQ¥µ•½ÕÐ¡ÕÁ‘…Ñ•!•…‘•É½¹ÑÉ½±Ì°€À¤ì(€ô°ÑÉÕ”¤ì((€½¹ÍÐ±¥ÍÑ=‰Í•ÉÙ•È€ô¹•Ü5ÕÑ…Ñ¥½¹=‰Í•ÉÙ•È  ¤€ôøì(€€€½¹ÍÐÁ±…å¥¹œ€ôÑÉ…­1¥ÍÐ¹ÅÕ•ÉåM•±•Ñ½È œ¹ÑÉ…¬µÉ½Ü¹Á±…å¥¹œœ¤ì(€€€¥˜€¡Á±…å¥¹œü¹‘…Ñ…Í•Ðü¹¥¤±…ÍÑA±…å¥¹%€ôÁ±…å¥¹œ¹‘…Ñ…Í•Ð¹¥ì(€€€¥˜€¡É•½É‘•É5½‘”¤É•ÅÕ•ÍÑ¹¥µ…Ñ¥½¹É…µ”¡‘•½É…Ñ•I•½É‘•ÉI½ÝÌ¤ì(€ô¤ì(€±¥ÍÑ=‰Í•ÉÙ•È¹½‰Í•ÉÙ”¡ÑÉ…­1¥ÍÐ°ì¡¥±‘1¥ÍÐèÑÉÕ”°ÍÕ‰ÑÉ•”è™…±Í”ô¤ì((€‘½Õµ•¹Ð¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°•Ù•¹Ð€ôøì(€€€½¹ÍÐµ•¹Ô€ô•Ù•¹Ð¹Ñ…É•Ð¹±½Í•ÍÐ œ¹ÑÉ…¬µµ•¹Ôœ¤ì(€€€¥˜€¡µ•¹Ô¤ì(€€€€€½¹ÍÐ¥€ôµ•¹Ô¹±½Í•ÍÐ œ¹ÑÉ…¬µÉ½Üœ¤ü¹‘…Ñ…Í•Ðü¹¥ì(€€€€€¥˜€¡¥¤Á•¹‘¥¹¥…±½œ€ôìµ½‘”è€Í¥¹±”œ°¥‘Ìèm¥‘tôì(€€€€€É•ÑÕÉ¸ì(€€€ô(€€€¥˜€¡•Ù•¹Ð¹Ñ…É•Ð¹±½Í•ÍÐ œ‰Õ±­‘‘	Ñ¸œ¤¤ì(€€€€€½¹ÍÐ¥‘Ì€ôl¸¸¹ÑÉ…­1¥ÍÐ¹ÅÕ•ÉåM•±•Ñ½É±° œ¹ÑÉ…¬µÉ½Ü¹Í•±•Ñ•œ¥t¹µ…À¡É½Ü€ôøÉ½Ü¹‘…Ñ…Í•Ð¹¥¤¹™¥±Ñ•È¡	½½±•…¸¤ì(€€€€€Á•¹‘¥¹¥…±½œ€ôìµ½‘”è€…‘œ°¥‘Ìôì(€€€€€É•ÑÕÉ¸ì(€€€ô(€€€¥˜€¡Á±…å•ÉA±…å±¥ÍÑ	Ñ¸€˜˜•Ù•¹Ð¹Ñ…É•Ð¹±½Í•ÍÐ œÁ±…å•ÉA±…å±¥ÍÑ	Ñ¸œ¤¤ì(€€€€€½¹ÍÐ¥€ôÑÉ…­1¥ÍÐ¹ÅÕ•ÉåM•±•Ñ½È œ¹ÑÉ…¬µÉ½Ü¹Á±…å¥¹œœ¤ü¹‘…Ñ…Í•Ðü¹¥ñð±…ÍÑA±…å¥¹%ì(€€€€€¥˜€¡¥¤Á•¹‘¥¹¥…±½œ€ôìµ½‘”è€Í¥¹±”œ°¥‘Ìèm¥‘tôì(€€€ô(€ô°ÑÉÕ”¤ì((€™Õ¹Ñ¥½¸…Õµ•¹ÑA±…å±¥ÍÑ¡½¥•Ì ¤ì(€€€¥˜€ …Á±…å±¥ÍÑ¡½¥•Ìñð€…Á±…å±¥ÍÑ¥…±½œü¹½Á•¸¤É•ÑÕÉ¸ì(€€€Á±…å±¥ÍÑ¡½¥•Ì¹ÅÕ•ÉåM•±•Ñ½É±° œ¹ÕÍÑ½´µÁ±…å±¥ÍÐµ¡½¥”œ¤¹™½É… ¡¹½‘”€ôø¹½‘”¹É•µ½Ù” ¤¤ì(€€€½¹ÍÐ‘…Ñ„€ôÉ•…‘ÕÍÑ½´ ¤ì(€€€½¹ÍÐ¥€ôÁ•¹‘¥¹¥…±½œ¹¥‘ÍlÁtì(€€€™½È€¡½¹ÍÐ¹…µ”½˜=‰©•Ð¹­•åÌ¡‘…Ñ„¤¤ì(€€€€€½¹ÍÐ±…‰•°€ô‘½Õµ•¹Ð¹É•…Ñ•±•µ•¹Ð ±…‰•°œ¤ì(€€€€€±…‰•°¹±…ÍÍ9…µ”€ô€Á±…å±¥ÍÐµ¡½¥”ÕÍÑ½´µÁ±…å±¥ÍÐµ¡½¥”œì(€€€€€½¹ÍÐˆ€ô‘½Õµ•¹Ð¹É•…Ñ•±•µ•¹Ð ¥¹ÁÕÐœ¤ì(€€€€€ˆ¹ÑåÁ”€ô€¡•­‰½àœì(€€€€€ˆ¹Ù…±Õ”€ô¹…µ”ì(€€€€€ˆ¹‘…Ñ…Í•Ð¹ÕÍÑ½µA±…å±¥ÍÐ€ô€œÄœì(€€€€€ˆ¹¡•­•€ôÁ•¹‘¥¹¥…±½œ¹µ½‘”€ôôô€Í¥¹±”œ€˜˜€„…¥€˜˜Í…™•%‘Ì¡‘…Ñ…m¹…µ•t¤¹¥¹±Õ‘•Ì¡¥¤ì(€€€€€½¹ÍÐÍÁ…¸€ô‘½Õµ•¹Ð¹É•…Ñ•±•µ•¹Ð ÍÁ…¸œ¤ì(€€€€€ÍÁ…¸¹Ñ•áÑ½¹Ñ•¹Ð€ô¹…µ”ì(€€€€€±…‰•°¹…ÁÁ•¹¡ˆ°ÍÁ…¸¤ì(€€€€€Á±…å±¥ÍÑ¡½¥•Ì¹…ÁÁ•¹‘¡¥±¡±…‰•°¤ì(€€€ô(€ô((€¥˜€¡Á±…å±¥ÍÑ¥…±½œ¤ì(€€€¹•Ü5ÕÑ…Ñ¥½¹=‰Í•ÉÙ•È  ¤€ôøì(€€€€€¥˜€¡Á±…å±¥ÍÑ¥…±½œ¹½Á•¸¤…Õµ•¹ÑA±…å±¥ÍÑ¡½¥•Ì ¤ì(€€€ô¤¹½‰Í•ÉÙ”¡Á±…å±¥ÍÑ¥…±½œ°ì…ÑÑÉ¥‰ÕÑ•ÌèÑÉÕ”°…ÑÑÉ¥‰ÕÑ•¥±Ñ•Èèl½Á•¸tô¤ì(€ô((€Í…Ù•A±…å±¥ÍÑÍ	Ñ¸ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€€€¥˜€ …Á•¹‘¥¹¥…±½œ¹¥‘Ì¹±•¹Ñ ¤É•ÑÕÉ¸ì(€€€½¹ÍÐ‘…Ñ„€ôÉ•…‘ÕÍÑ½´ ¤ì(€€€½¹ÍÐ¡•­•€ô¹•ÜM•Ð¡l¸¸¹Á±…å±¥ÍÑ¡½¥•Ì¹ÅÕ•ÉåM•±•Ñ½É±° ¥¹ÁÕÑm‘…Ñ„µÕÍÑ½´µÁ±…å±¥ÍÐôˆÄ‰té¡•­•œ¥t¹µ…À¡ˆ€ôøˆ¹Ù…±Õ”¤¤ì(€€€™½È€¡½¹ÍÐ¹…µ”½˜=‰©•Ð¹­•åÌ¡‘…Ñ„¤¤ì(€€€€€½¹ÍÐÍ•Ð€ô¹•ÜM•Ð¡Í…™•%‘Ì¡‘…Ñ…m¹…µ•t¤¤ì(€€€€€¥˜€¡Á•¹‘¥¹¥…±½œ¹µ½‘”€ôôô€…‘œ¤ì(€€€€€€€¥˜€¡¡•­•¹¡…Ì¡¹…µ”¤¤Á•¹‘¥¹¥…±½œ¹¥‘Ì¹™½É… ¡¥€ôøÍ•Ð¹…‘¡¥¤¤ì(€€€€€ô•±Í”ì(€€€€€€€½¹ÍÐ¥€ôÁ•¹‘¥¹¥…±½œ¹¥‘ÍlÁtì(€€€€€€€¥˜€¡¡•­•¹¡…Ì¡¹…µ”¤¤Í•Ð¹…‘¡¥¤ì•±Í”Í•Ð¹‘•±•Ñ”¡¥¤ì(€€€€€ô(€€€€€‘…Ñ…m¹…µ•t€ôl¸¸¹Í•Ñtì(€€€ô(€€€ÝÉ¥Ñ•ÕÍÑ½´¡‘…Ñ„¤ì(€€€Á•¹‘¥¹¥…±½œ€ôìµ½‘”è€Í¥¹±”œ°¥‘Ìèmtôì(€ô¤ì((€É•µ½Ù••Ù¥•	Ñ¸ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°€ ¤€ôøì(€€€¥˜€ …É•µ½Ù••Ù¥•	Ñ¸¹‘¥Í…‰±•¤É•ÑÕÉ¸ì(€€€½¹ÍÐ¥€ôÁ•¹‘¥¹¥…±½œ¹¥‘ÍlÁtñðÑÉ…­1¥ÍÐ¹ÅÕ•ÉåM•±•Ñ½È œ¹ÑÉ…¬µÉ½Ü¹Á±…å¥¹œœ¤ü¹‘…Ñ…Í•Ðü¹¥ñð±…ÍÑA±…å¥¹%ì(€€€¥˜€ …¥¤É•ÑÕÉ¸ì(€€€½¹ÍÐ‘…Ñ„€ôÉ•…‘ÕÍÑ½´ ¤ì(€€€™½È€¡½¹ÍÐ¹…µ”½˜=‰©•Ð¹­•åÌ¡‘…Ñ„¤¤‘…Ñ…m¹…µ•t€ôÍ…™•%‘Ì¡‘…Ñ…m¹…µ•t¤¹™¥±Ñ•È¡ÑÉ…­%€ôøÑÉ…­%€„ôô¥¤ì(€€€ÝÉ¥Ñ•ÕÍÑ½´¡‘…Ñ„¤ì(€ô¤ì((€…Íå¹Œ™Õ¹Ñ¥½¸•áÁ½ÉÑ¹¡…¹•‘	…­ÕÀ¡•Ù•¹Ð¤ì(€€€•Ù•¹Ð¹ÁÉ•Ù•¹Ñ•™…Õ±Ð ¤ì(€€€•Ù•¹Ð¹ÍÑ½Á%µµ•‘¥…Ñ•AÉ½Á……Ñ¥½¸ ¤ì(€€€½¹ÍÐ‰Õ¥±Ñ¥¹Ì€ôÉ•…‘	Õ¥±Ñ¥¹A±…å±¥ÍÑÌ ¤ì(€€€½¹ÍÐÕÍÑ½´€ôÉ•…‘ÕÍÑ½´ ¤ì(€€€½¹ÍÐÁ±…å±¥ÍÑÌ€ôíôì(€€€™½È€¡½¹ÍÐ¹…µ”½˜	U%1Q%9}A1e1%MQL¤Á±…å±¥ÍÑÍm¹…µ•t€ôÍ…™•%‘Ì¡‰Õ¥±Ñ¥¹Ím¹…µ•t¤ì(€€€™½È€¡½¹ÍÐm¹…µ”°¥‘Ít½˜=‰©•Ð¹•¹ÑÉ¥•Ì¡ÕÍÑ½´¤¤Á±…å±¥ÍÑÍm¹…µ•t€ôÍ…™•%‘Ì¡¥‘Ì¤ì(€€€±•Ð™…Ù½É¥Ñ•Ì€ômtì(€€€ÑÉäì™…Ù½É¥Ñ•Ì€ôÍ…™•%‘Ì¡)M=8¹Á…ÉÍ”¡±½…±MÑ½É…”¹•Ñ%Ñ•´¡Y=I%QM}-d¤ñð€mtœ¤¤ìô…Ñ íô(€€€½¹ÍÐÁ…å±½…€ôì(€€€€€…ÁÀè€1•á¤5ÕÍ¥Œœ°(€€€€€Ù•ÉÍ¥½¸è	-UA}YIM%=8°(€€€€€•áÁ½ÉÑ•‘Ðè¹•Ü…Ñ” ¤¹Ñ½%M=MÑÉ¥¹œ ¤°(€€€€€Á±…å±¥ÍÑÌ°(€€€€€ÕÍÑ½µA±…å±¥ÍÑ9…µ•Ìè=‰©•Ð¹­•åÌ¡ÕÍÑ½´¤°(€€€€€™…Ù½É¥Ñ•Ì(€€€ôì(€€€½¹ÍÐ™¥±•¹…µ”€ô±•á¤µµÕÍ¥ŒµÁ±…å±¥ÍÑÌ´‘í¹•Ü…Ñ” ¤¹Ñ½%M=MÑÉ¥¹œ ¤¹Í±¥” À°€ÄÀ¥ô¹©Í½¹€ì(€€€½¹ÍÐÑ•áÐ€ô)M=8¹ÍÑÉ¥¹¥™ä¡Á…å±½…°¹Õ±°°€È¤ì(€€€½¹ÍÐ™¥±”€ô¹•Ü¥±”¡mÑ•áÑt°™¥±•¹…µ”°ìÑåÁ”è€…ÁÁ±¥…Ñ¥½¸½©Í½¸œô¤ì(€€€ÑÉäì(€€€€€¥˜€¡¹…Ù¥…Ñ½È¹…¹M¡…É”ü¸¡ì™¥±•Ìèm™¥±•tô¤¤ì(€€€€€€€…Ý…¥Ð¹…Ù¥…Ñ½È¹Í¡…É”¡ì™¥±•Ìèm™¥±•t°Ñ¥Ñ±”è€1•á¤5ÕÍ¥ŒÁ±…å±¥ÍÐ‰…­ÕÀœô¤ì(€€€€€€€É•ÑÕÉ¸ì(€€€€€ô(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€¥˜€¡•ÉÉ½Èü¹¹…µ”€ôôô€‰½ÉÑÉÉ½Èœ¤É•ÑÕÉ¸ì(€€€ô(€€€½¹ÍÐÕÉ°€ôUI0¹É•…Ñ•=‰©•ÑUI0¡™¥±”¤ì(€€€½¹ÍÐ„€ô‘½Õµ•¹Ð¹É•…Ñ•±•µ•¹Ð „œ¤ì(€€€„¹¡É•˜€ôÕÉ°ì(€€€„¹‘½Ý¹±½…€ô™¥±•¹…µ”ì(€€€‘½Õµ•¹Ð¹‰½‘ä¹…ÁÁ•¹‘¡¥±¡„¤ì(€€€„¹±¥¬ ¤ì(€€€„¹É•µ½Ù” ¤ì(€€€Í•ÑQ¥µ•½ÕÐ  ¤€ôøUI0¹É•Ù½­•=‰©•ÑUI0¡ÕÉ°¤°€ÄÀÀÀ¤ì(€ô((€…Íå¹Œ™Õ¹Ñ¥½¸¥µÁ½ÉÑ¹¡…¹•‘	…­ÕÀ¡™¥±”¤ì(€€€¥˜€ …™¥±”¤É•ÑÕÉ¸ì(€€€ÑÉäì(€€€€€½¹ÍÐÁ…ÉÍ•€ô)M=8¹Á…ÉÍ”¡…Ý…¥Ð™¥±”¹Ñ•áÐ ¤¤ì(€€€€€¥˜€ …Á…ÉÍ•ñðÑåÁ•½˜Á…ÉÍ•€„ôô€½‰©•Ðœñð€…Á…ÉÍ•¹Á±…å±¥ÍÑÌ¤Ñ¡É½Ü¹•ÜÉÉ½È Q¡¥Ì¥Ì¹½Ð„1•á¤5ÕÍ¥ŒÁ±…å±¥ÍÐ‰…­ÕÀ¸œ¤ì(€€€€€½¹ÍÐ¥µÁ½ÉÑ•‘	Õ¥±Ñ¥¹Ì€ôíôì(€€€€€™½È€¡½¹ÍÐ¹…µ”½˜	U%1Q%9}A1e1%MQL¤¥µÁ½ÉÑ•‘	Õ¥±Ñ¥¹Ím¹…µ•t€ôÍ…™•%‘Ì¡Á…ÉÍ•¹Á±…å±¥ÍÑÍm¹…µ•t¤ì((€€€€€½¹ÍÐ•áÁ±¥¥Ñ9…µ•Ì€ôÉÉ…ä¹¥ÍÉÉ…ä¡Á…ÉÍ•¹ÕÍÑ½µA±…å±¥ÍÑ9…µ•Ì¤€üÁ…ÉÍ•¹ÕÍÑ½µA±…å±¥ÍÑ9…µ•Ì€èmtì(€€€€€½¹ÍÐ¥¹™•ÉÉ•‘9…µ•Ì€ô=‰©•Ð¹­•åÌ¡Á…ÉÍ•¹Á±…å±¥ÍÑÌ¤¹™¥±Ñ•È¡¹…µ”€ôø€…	U%1Q%9}A1e1%MQL¹¥¹±Õ‘•Ì¡¹…µ”¤¤ì(€€€€€½¹ÍÐ…¹‘¥‘…Ñ•Ì€ô•áÁ±¥¥Ñ9…µ•Ì¹±•¹Ñ €ü•áÁ±¥¥Ñ9…µ•Ì€è¥¹™•ÉÉ•‘9…µ•Ìì(€€€€€½¹ÍÐ¥µÁ½ÉÑ•‘ÕÍÑ½´€ô=‰©•Ð¹É•…Ñ”¡¹Õ±°¤ì(€€€€€½¹ÍÐÉ•Í•ÉÙ•‘%µÁ½ÉÑ-•åÌ€ô¹•ÜM•Ð¡l10œ°€Y=I%QLœ°€=]91=œ°€¸¸¹	U%1Q%9}A1e1%MQMt¹µ…À¡¹…µ•-•ä¤¤ì(€€€€€™½È€¡½¹ÍÐÉ…Ý9…µ”½˜…¹‘¥‘…Ñ•Ì¤ì(€€€€€€€¥˜€¡ÑåÁ•½˜É…Ý9…µ”€„ôô€ÍÑÉ¥¹œœ¤½¹Ñ¥¹Õ”ì(€€€€€€€½¹ÍÐ¹…µ”€ôÉ…Ý9…µ”¹ÑÉ¥´ ¤ì(€€€€€€€¥˜€ …¹…µ”ñðÉ•Í•ÉÙ•‘%µÁ½ÉÑ-•åÌ¹¡…Ì¡¹…µ•-•ä¡¹…µ”¤¤¤½¹Ñ¥¹Õ”ì(€€€€€€€¥˜€¡=‰©•Ð¹ÁÉ½Ñ½ÑåÁ”¹¡…Í=Ý¹AÉ½Á•ÉÑä¹…±°¡=‰©•Ð¹ÁÉ½Ñ½ÑåÁ”°¹…µ”¤¤½¹Ñ¥¹Õ”ì(€€€€€€€¥µÁ½ÉÑ•‘ÕÍÑ½µm¹…µ•t€ôÍ…™•%‘Ì¡Á…ÉÍ•¹Á±…å±¥ÍÑÍm¹…µ•t¤ì(€€€€€ô(€€€€€½¹ÍÐ¥µÁ½ÉÑ•‘…Ù½É¥Ñ•Ì€ôÍ…™•%‘Ì¡Á…ÉÍ•¹™…Ù½É¥Ñ•Ì¤ì(€€€€€¥˜€ …½¹™¥É´ I•Á±…”Ñ¡”ÕÉÉ•¹ÐÁ±…å±¥ÍÑÌ…¹…Ù½É¥Ñ•ÌÝ¥Ñ Ñ¡¥Ì‰…­ÕÀü½Ý¹±½…‘•Í½¹ÌÝ¥±°¹½Ð‰”¡…¹•¸œ¤¤É•ÑÕÉ¸ì(€€€€€ÝÉ¥Ñ•	Õ¥±Ñ¥¹A±…å±¥ÍÑÌ¡¥µÁ½ÉÑ•‘	Õ¥±Ñ¥¹Ì¤ì(€€€€€ÝÉ¥Ñ•ÕÍÑ½´¡¥µÁ½ÉÑ•‘ÕÍÑ½´¤ì(€€€€€±½…±MÑ½É…”¹Í•Ñ%Ñ•´¡Y=I%QM}-d°)M=8¹ÍÑÉ¥¹¥™ä¡¥µÁ½ÉÑ•‘…Ù½É¥Ñ•Ì¤¤ì(€€€€€Í•ÍÍ¥½¹MÑ½É…”¹Í•Ñ%Ñ•´¡IMQ=I}Y%]}-d°€e4œ¤ì(€€€€€±½…Ñ¥½¸¹É•±½… ¤ì(€€€ô…Ñ €¡•ÉÉ½È¤ì(€€€€€…±•ÉÐ¡•ÉÉ½È¹µ•ÍÍ…”ñð€½Õ±¹½Ð¥µÁ½ÉÐÑ¡¥ÌÁ±…å±¥ÍÐ‰…­ÕÀ¸œ¤ì(€€€ô™¥¹…±±äì(€€€€€‰…­ÕÁ¥±•%¹ÁÕÐ¹Ù…±Õ”€ô€œœì(€€€ô(€ô((€•áÁ½ÉÑ	…­ÕÁ	Ñ¸ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°•áÁ½ÉÑ¹¡…¹•‘	…­ÕÀ°ÑÉÕ”¤ì(€¥µÁ½ÉÑ	…­ÕÁ	Ñ¸ü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ±¥¬œ°•Ù•¹Ð€ôøì(€€€•Ù•¹Ð¹ÁÉ•Ù•¹Ñ•™…Õ±Ð ¤ì(€€€•Ù•¹Ð¹ÍÑ½Á%µµ•‘¥…Ñ•AÉ½Á……Ñ¥½¸ ¤ì(€€€‰…­ÕÁ¥±•%¹ÁÕÐü¹±¥¬ ¤ì(€ô°ÑÉÕ”¤ì(€‰…­ÕÁ¥±•%¹ÁÕÐü¹…‘‘Ù•¹Ñ1¥ÍÑ•¹•È ¡…¹”œ°•Ù•¹Ð€ôøì(€€€•Ù•¹Ð¹ÍÑ½Á%µµ•‘¥…Ñ•AÉ½Á……Ñ¥½¸ ¤ì(€€€¥µÁ½ÉÑ¹¡…¹•‘	…­ÕÀ¡‰…­ÕÁ¥±•%¹ÁÕÐ¹™¥±•Ìü¹lÁt¤ì(€ô°ÑÉÕ”¤ì((€¥¹ÍÑ…±±±±•ÍÍ½ÉÌ ¤ì(€É•¹‘•ÉÕÍÑ½µQ…‰Ì ¤ì((€½¹ÍÐÉ•ÍÑ½É”€ôÍ•ÍÍ¥½¹MÑ½É…”¹•Ñ%Ñ•´¡IMQ=I}Y%]}-d¤ì(€¥˜€¡É•ÍÑ½É”¤ì(€€€Í•ÍÍ¥½¹MÑ½É…”¹É•µ½Ù•%Ñ•´¡IMQ=I}Y%]}-d¤ì(€€€Í•ÑQ¥µ•½ÕÐ  ¤€ôøÑ…‰Ì¹ÅÕ•ÉåM•±•Ñ½È¡€¹Ñ…‰m‘…Ñ„µÙ¥•Üôˆ‘íML¹•Í…Á”¡É•ÍÑ½É”¥ô‰u€¤ü¹±¥¬ ¤°€ÌÀ¤ì(€ô•±Í”ì(€€€ÕÁ‘…Ñ•!•…‘•É½¹ÑÉ½±Ì ¤ì(€ô)ô¤ ¤ì(
