@@ -1,7 +1,7 @@
-const CACHE = 'music-shell-v17';
-const OFFLINE_HTML = './index.html?v=14';
-const APP_JS = './app.js?v=11';
-const STYLES = './styles.css?v=12';
+const CACHE = 'music-shell-v18';
+const OFFLINE_HTML = './index.html?v=15';
+const APP_JS = './app.js?v=12';
+const STYLES = './styles.css?v=13';
 const SHELL = [OFFLINE_HTML, STYLES, APP_JS, './manifest.json'];
 
 self.addEventListener('install', event => {
