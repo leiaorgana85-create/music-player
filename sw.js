@@ -1,6 +1,6 @@
-const CACHE = 'music-shell-v10';
+const CACHE = 'music-shell-v11';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js?v=7', './manifest.json'
+  './', './index.html', './styles.css', './app.js?v=8', './manifest.json'
 ];
 
 self.addEventListener('install', event => {
@@ -18,38 +18,18 @@ self.addEventListener('activate', event => {
 self.addEventListener('fetch', event => {
   const req = event.request;
   if (req.method !== 'GET') return;
-
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  const cacheKey = req.mode === 'navigate' ? './index.html' : req;
-
+  // Prefer fresh app code when online, but fall back to the cached shell offline.
   event.respondWith(
-    caches.open(CACHE).then(async cache => {
-      const cached = await cache.match(cacheKey);
-
-      if (cached) {
-        // Return the local shell immediately, then refresh it quietly in the background.
-        event.waitUntil(
-          fetch(req).then(res => {
-            if (res.ok) return cache.put(cacheKey, res.clone());
-          }).catch(() => {})
-        );
-        return cached;
-      }
-
-      // First-load fallback when this resource has not been cached yet.
-      try {
-        const res = await fetch(req);
-        if (res.ok) await cache.put(cacheKey, res.clone());
-        return res;
-      } catch {
-        if (req.mode === 'navigate') {
-          const offline = await cache.match('./index.html');
-          if (offline) return offline;
-        }
-        throw new Error('Network unavailable and resource is not cached.');
-      }
+    fetch(req).then(res => {
+      const copy = res.clone();
+      caches.open(CACHE).then(cache => cache.put(req.mode === 'navigate' ? './index.html' : req, copy));
+      return res;
+    }).catch(async () => {
+      if (req.mode === 'navigate') return caches.match('./index.html');
+      return (await caches.match(req)) || caches.match(url.pathname.endsWith('/app.js') ? './app.js?v=8' : req);
     })
   );
 });
