@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MUSIC" />
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=16" />
+  <link rel="stylesheet" href="styles.css?v=17" />
   <title>MUSIC</title>
   <script>window.__musicBootStart = performance.now();</script>
 </head>
@@ -37,6 +37,7 @@
 
     <nav id="tabs" class="tabs" aria-label="Library views">
       <button class="tab" data-view="ALL">ALL</button>
+      <button class="tab" data-view="DOWNLOADED">↓ DOWNLOADED</button>
       <button class="tab active" data-view="GYM">GYM</button>
       <button class="tab" data-view="FEEL GOOD">FEEL GOOD</button>
       <button class="tab" data-view="BOSSA">BOSSA</button>
@@ -54,6 +55,7 @@
           <div id="viewCount" class="muted">0 songs</div>
         </div>
         <div class="view-actions">
+          <button id="downloadViewBtn" class="small-control">Download view</button>
           <button id="selectBtn" class="small-control">Select</button>
           <button id="shuffleBtn" class="small-control" aria-pressed="true">Shuffle</button>
         </div>
@@ -64,6 +66,7 @@
         <div class="bulk-actions">
           <button id="bulkAddBtn" class="button compact-button">Add to playlist</button>
           <button id="bulkRemoveBtn" class="button secondary compact-button">Remove from playlist</button>
+          <button id="bulkRemoveDownloadBtn" class="button secondary compact-button hidden">Remove download</button>
           <button id="bulkCancelBtn" class="button secondary compact-button">Cancel</button>
         </div>
       </div>
@@ -83,7 +86,6 @@
       </div>
       <div class="player-actions">
         <button id="playerFavoriteBtn" class="player-action" aria-label="Add to Favorites">♡</button>
-        <button id="queueBtn" class="player-action hidden" aria-label="Up Next">☷</button>
         <button id="playerPlaylistBtn" class="player-action" aria-label="Playlist options">＋</button>
       </div>
     </div>
@@ -101,7 +103,6 @@
   <dialog id="playlistDialog" class="dialog">
     <form method="dialog">
       <div id="playlistDialogTitle" class="dialog-title">Song options</div>
-      <button id="playNextBtn" type="button" class="button secondary dialog-wide-button hidden">Play Next</button>
       <div class="dialog-section-label">Playlists</div>
       <div id="playlistChoices" class="playlist-choices"></div>
       <button id="removeDeviceBtn" type="button" class="button secondary hidden" style="width:100%; margin-top:16px;">Remove from device</button>
@@ -110,14 +111,6 @@
         <button id="savePlaylistsBtn" value="default" class="button">Save</button>
       </div>
     </form>
-  </dialog>
-
-  <dialog id="queueDialog" class="dialog queue-dialog">
-    <div class="dialog-title">Up Next</div>
-    <div id="queueList" class="queue-list"></div>
-    <div class="dialog-actions">
-      <button id="closeQueueBtn" type="button" class="button">Done</button>
-    </div>
   </dialog>
 
   <dialog id="settingsDialog" class="dialog">
@@ -326,6 +319,6 @@
     })();
   </script>
   <script src="metadata.js?v=1" defer></script>
-  <script src="app.js?v=15" defer></script>
+  <script src="app.js?v=16" defer></script>
 </body>
 </html>
