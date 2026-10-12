@@ -354,7 +354,9 @@
       node.querySelector('.track-index').textContent = i + 1;
       node.querySelector('.track-title').textContent = track.title;
       node.querySelector('.track-meta').textContent = [bytes(track.size), offlineIds.has(track.id) ? 'Offline' : 'Drive'].filter(Boolean).join(' • ');
-      node.querySelector('.offline-badge').classList.toggle('visible', offlineIds.has(track.id));
+      const offlineBadge = node.querySelector('.offline-badge');
+      offlineBadge.textContent = '✓';
+      offlineBadge.classList.toggle('visible', offlineIds.has(track.id));
       node.querySelector('.select-glyph').textContent = selectedIds.has(track.id) ? '✓' : '○';
 
       const primaryAction = () => selectionMode ? toggleSelection(track.id) : playTrack(track.id);
@@ -517,6 +519,33 @@
     updateRepeatButton();
   }
 
+  function setupPlayerTimeline() {
+    if (!els.seek || document.querySelector('.seek-times')) return;
+    const times = document.createElement('div');
+    times.className = 'seek-times';
+    const current = document.createElement('span');
+    const duration = document.createElement('span');
+    current.textContent = '0:00';
+    duration.textContent = '0:00';
+    times.append(current, duration);
+    els.seek.insertAdjacentElement('afterend', times);
+
+    const formatTime = value => {
+      if (!Number.isFinite(value) || value < 0) return '0:00';
+      const total = Math.floor(value);
+      return `${Math.floor(total / 60)}:${String(total % 60).padStart(2, '0')}`;
+    };
+    const updateTimes = () => {
+      current.textContent = formatTime(els.audio.currentTime);
+      duration.textContent = formatTime(els.audio.duration);
+    };
+    els.audio.addEventListener('timeupdate', updateTimes);
+    els.audio.addEventListener('loadedmetadata', updateTimes);
+    els.audio.addEventListener('durationchange', updateTimes);
+    els.audio.addEventListener('emptied', updateTimes);
+    updateTimes();
+  }
+
   function bindEvents() {
     els.settingsBtn.addEventListener('click', () => {
       els.clientIdInput.value = settings.clientId || '';
@@ -608,6 +637,7 @@
 
   async function init() {
     bindEvents();
+    setupPlayerTimeline();
     updateRepeatButton();
     updateBulkBar();
 
@@ -622,9 +652,9 @@
     }
 
     if (settings.clientId) {
-      setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', startupDetail());
+      setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', `${library.length} songs • ${offlineIds.size} downloaded`);
     } else {
-      setStatus('Setup required', startupDetail());
+      setStatus('Setup required', '');
     }
   }
 
