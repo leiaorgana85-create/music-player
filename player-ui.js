@@ -77,7 +77,6 @@
     const saveButton = document.getElementById('saveSettingsBtn');
     const exportButton = document.getElementById('exportBackupBtn');
     const statusLabel = document.getElementById('connectionLabel');
-    const statusDetail = document.getElementById('statusDetail');
     if (!dialog || !form || !clientInput || !folderInput || !exportButton) return;
     if (dialog.classList.contains('settings-clean')) return;
 
@@ -98,6 +97,14 @@
       #settingsDialog.settings-clean .settings-row-label { color: var(--muted); }
       #settingsDialog.settings-clean .settings-row-value { color: var(--text); text-align: right; font-weight: 650; }
       #settingsDialog.settings-clean .settings-note { margin: 5px 0 0; }
+      #settingsDialog.settings-clean .settings-storage-path {
+        margin-top: 4px; color: var(--muted); font-size: 11px; line-height: 1.4;
+      }
+      #settingsDialog.settings-clean .settings-storage-actions { margin-top: 10px; }
+      #settingsDialog.settings-clean .settings-storage-actions .button { width: 100%; }
+      #settingsDialog.settings-clean .settings-storage-result {
+        min-height: 16px; margin: 8px 0 0; font-size: 12px; line-height: 1.4;
+      }
       #settingsDialog.settings-clean details.settings-advanced > summary {
         cursor: pointer; color: var(--muted); font-size: 12px; font-weight: 650;
       }
@@ -139,8 +146,14 @@
     storageSection.innerHTML = `
       <div class="settings-section-title">Storage</div>
       <div class="settings-row"><span class="settings-row-label">Offline audio</span><span id="settingsAudioStorage" class="settings-row-value">Calculating…</span></div>
-      <div class="settings-row"><span class="settings-row-label">Total app storage</span><span id="settingsTotalStorage" class="settings-row-value">Calculating…</span></div>
-      <p class="help settings-note">Total app storage is the iOS/WebKit estimate for MUSIC, including offline audio, database data, and app cache.</p>
+      <div class="settings-storage-path">Exact local audio stored in IndexedDB: <strong>music-pwa-db → audio</strong></div>
+      <div class="settings-row"><span class="settings-row-label">Site storage estimate</span><span id="settingsTotalStorage" class="settings-row-value">Calculating…</span></div>
+      <p class="help settings-note">The offline-audio number above is exact. The site-storage number is only an iOS/WebKit estimate and may include other pages on leiaorgana85-create.github.io.</p>
+      <div class="settings-storage-actions">
+        <button id="settingsClearOfflineBtn" type="button" class="button secondary">Delete all offline audio</button>
+      </div>
+      <p class="help settings-note">Use this before removing or reinstalling the Home Screen app. Google Drive files, the local library list, playlists, and Favorites are kept.</p>
+      <p id="settingsStorageResult" class="settings-storage-result"></p>
     `;
 
     const driveSection = document.createElement('div');
@@ -178,19 +191,72 @@
 
     function formatBytes(value) {
       const n = Number(value || 0);
-      if (!Number.isFinite(n) || n <= 0) return '0 KB';
+      if (!Number.isFinite(n) || n <= 0) return '0 MB';
       if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`;
       if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
       return `${Math.round(n / 1024)} KB`;
     }
 
-    function offlineAudioText() {
-      const text = (statusDetail?.textContent || '').trim();
-      if (!text || /loading/i.test(text)) return 'Calculating…';
-      const parts = text.split('•').map(x => x.trim()).filter(Boolean);
-      if (!parts.length) return 'Calculating…';
-      const last = parts[parts.length - 1].replace(/\boffline\b.*$/i, '').trim();
-      return last || 'Calculating…';
+    function storedAudioSize(row) {
+      const value = row?.blob ?? row;
+      if (!value) return 0;
+      if (value.__musicBytes instanceof ArrayBuffer) return value.__musicBytes.byteLength;
+      if (value instanceof ArrayBuffer) return value.byteLength;
+      if (ArrayBuffer.isView(value)) return value.byteLength;
+      if (typeof Blob !== 'undefined' && value instanceof Blob) return value.size;
+      return 0;
+    }
+
+    function openMusicDb() {
+      return new Promise((resolve, reject) => {
+        const request = indexedDB.open('music-pwa-db', 1);
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    function requestPromise(request) {
+      return new Promise((resolve, reject) => {
+        request.onsuccess = () => resolve(request.result);
+        request.onerror = () => reject(request.error);
+      });
+    }
+
+    function finishTransaction(transaction) {
+      return new Promise((resolve, reject) => {
+        transaction.oncomplete = resolve;
+        transaction.onerror = () => reject(transaction.error);
+        transaction.onabort = () => reject(transaction.error || new Error('Storage operation was cancelled.'));
+      });
+    }
+
+    async function readOfflineAudioStorage() {
+      const db = await openMusicDb();
+      try {
+        if (!db.objectStoreNames.contains('audio')) return { count: 0, bytes: 0 };
+        const transaction = db.transaction('audio', 'readonly');
+        const rows = await requestPromise(transaction.objectStore('audio').getAll());
+        return {
+          count: rows.length,
+          bytes: rows.reduce((sum, row) => sum + storedAudioSize(row), 0)
+        };
+      } finally {
+        db.close();
+      }
+    }
+
+    async function clearOfflineAudioStorage() {
+      const db = await openMusicDb();
+      try {
+        if (db.objectStoreNames.contains('audio')) {
+          const transaction = db.transaction('audio', 'readwrite');
+          transaction.objectStore('audio').clear();
+          await finishTransaction(transaction);
+        }
+      } finally {
+        db.close();
+      }
+      return readOfflineAudioStorage();
     }
 
     async function refreshSettingsStatus() {
@@ -198,7 +264,15 @@
       const totalValue = document.getElementById('settingsTotalStorage');
       const driveValue = document.getElementById('settingsDriveStatus');
 
-      if (audioValue) audioValue.textContent = offlineAudioText();
+      if (audioValue) {
+        audioValue.textContent = 'Calculating…';
+        try {
+          const offline = await readOfflineAudioStorage();
+          audioValue.textContent = `${offline.count} song${offline.count === 1 ? '' : 's'} · ${formatBytes(offline.bytes)}`;
+        } catch {
+          audioValue.textContent = 'Unavailable';
+        }
+      }
 
       if (totalValue) {
         totalValue.textContent = 'Calculating…';
@@ -218,6 +292,56 @@
         else if (label.includes('google drive connected')) driveValue.textContent = 'Connected';
         else driveValue.textContent = 'Configured';
       }
+    }
+
+    const clearOfflineButton = document.getElementById('settingsClearOfflineBtn');
+    const storageResult = document.getElementById('settingsStorageResult');
+
+    clearOfflineButton?.addEventListener('click', async () => {
+      clearOfflineButton.disabled = true;
+      if (storageResult) storageResult.textContent = 'Checking offline storage…';
+
+      try {
+        const before = await readOfflineAudioStorage();
+        if (before.count === 0 && before.bytes === 0) {
+          if (storageResult) storageResult.textContent = 'Verified: 0 songs · 0 MB offline. Nothing to delete.';
+          await refreshSettingsStatus();
+          return;
+        }
+
+        const confirmed = confirm(
+          `Delete all ${before.count} offline song${before.count === 1 ? '' : 's'} (${formatBytes(before.bytes)}) from this device?\n\n` +
+          'This deletes only the downloaded audio in Lexi Music. Google Drive files, the local library list, playlists, and Favorites are kept.'
+        );
+        if (!confirmed) return;
+
+        if (storageResult) storageResult.textContent = 'Deleting offline audio…';
+        const after = await clearOfflineAudioStorage();
+        if (after.count !== 0 || after.bytes !== 0) {
+          throw new Error(`Verification failed: ${after.count} audio row(s) remain.`);
+        }
+
+        sessionStorage.setItem('musicStorageClearVerified', '1');
+        location.reload();
+      } catch (error) {
+        console.error(error);
+        if (storageResult) storageResult.textContent = 'Could not verify a complete delete. No success was recorded.';
+        alert('Could not fully clear and verify offline audio. Please try again.');
+      } finally {
+        clearOfflineButton.disabled = false;
+      }
+    });
+
+    const verifiedAfterReload = sessionStorage.getItem('musicStorageClearVerified') === '1';
+    if (verifiedAfterReload) {
+      sessionStorage.removeItem('musicStorageClearVerified');
+      if (storageResult) {
+        storageResult.textContent = 'Verified: 0 songs · 0 MB offline. Safe to remove or reinstall the Home Screen app if needed.';
+      }
+      setTimeout(() => {
+        const settingsButton = document.getElementById('settingsBtn');
+        if (!dialog.open && settingsButton) settingsButton.click();
+      }, 50);
     }
 
     const openObserver = new MutationObserver(() => {
