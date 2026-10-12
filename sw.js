@@ -1,6 +1,6 @@
-const CACHE = 'music-shell-v1';
+const CACHE = 'music-shell-v2';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js', './manifest.json'
+  './', './index.html', './styles.css', './app.js?v=2', './manifest.json'
 ];
 
 self.addEventListener('install', event => {
