@@ -125,3 +125,30 @@ h2 { font-size: 18px; margin: 0 0 3px; }
   .repeat { width: 58px; flex-basis: 58px; padding: 4px 0; font-size: 10.5px; min-height: 27px; }
   .player-action { width: 32px; height: 32px; font-size: 17px; }
 }
+
+/* Current product direction: every library song is intended to remain offline. */
+.tab[data-view="DOWNLOADED"], #downloadViewBtn, #bulkRemoveDownloadBtn { display: none !important; }
+
+/* Now Playing polish. Artwork reuses the temporary Media Session image URL. */
+:root { --player-h: 218px; }
+.player-main { align-items: center; gap: 11px; }
+.now-artwork-wrap { width: 56px; height: 56px; flex: 0 0 56px; border-radius: 10px; overflow: hidden; border: 1px solid var(--border); background: var(--surface-2); display: grid; place-items: center; }
+.now-artwork { width: 100%; height: 100%; object-fit: cover; display: block; }
+.now-artwork-placeholder { color: #777780; font-size: 25px; line-height: 1; transform: translateY(-1px); }
+.now-artwork-wrap.no-art .now-artwork { display: none; }
+.now-artwork-wrap:not(.no-art) .now-artwork-placeholder { display: none; }
+.now-title { font-size: 16px; line-height: 1.22; font-weight: 700; display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; overflow: hidden; }
+.now-meta { margin-top: 4px; font-size: 11px; color: #c9c9cf; }
+.now-status { display: none; }
+.player-actions { gap: 6px; }
+.player-action { width: 36px; height: 36px; font-size: 19px; }
+.seek { margin-top: 10px; margin-bottom: 6px; }
+.seek-times { margin-bottom: 6px; }
+.player-controls { gap: 14px; }
+
+@media (max-width: 560px) {
+  .now-artwork-wrap { width: 52px; height: 52px; flex-basis: 52px; border-radius: 9px; }
+  .now-title { font-size: 15px; }
+  .now-meta { font-size: 10.5px; }
+  .player-action { width: 34px; height: 34px; font-size: 18px; }
+}
