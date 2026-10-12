@@ -1,10 +1,11 @@
-const CACHE = 'music-shell-v28';
+const CACHE = 'music-shell-v29';
 const OFFLINE_HTML = './index.html?v=23';
 const APP_JS = './app.js?v=16';
 const META_JS = './metadata.js?v=1';
-const PLAYER_UI_JS = './player-ui.js?v=3';
+const PLAYER_UI_JS = './player-ui.js?v=4';
+const PLAYLIST_JS = './playlist-enhancements.js?v=1';
 const STYLES = './styles.css?v=18';
-const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, PLAYER_UI_JS, './manifest.json'];
+const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, './manifest.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -32,10 +33,13 @@ self.addEventListener('fetch', event => {
   }
 
   // The page may still reference an older query-string version. Always serve
-  // the newest player UI script from the active shell so iOS cannot retain
-  // the old emoji transport controls.
+  // the newest UI enhancement scripts from the active shell.
   if (url.pathname.endsWith('/player-ui.js')) {
     event.respondWith(caches.match(PLAYER_UI_JS));
+    return;
+  }
+  if (url.pathname.endsWith('/playlist-enhancements.js')) {
+    event.respondWith(caches.match(PLAYLIST_JS));
     return;
   }
 
