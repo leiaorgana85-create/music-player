@@ -86,7 +86,7 @@ h2 { font-size: 18px; margin: 0 0 3px; }
 .player-controls { justify-content: center; gap: 12px; }
 .transport { width: 56px; height: 56px; border: 0; background: transparent; font-size: 30px; line-height: 1; }
 .primary-transport { width: 58px; height: 58px; border-radius: 50%; background: var(--text); color: var(--bg); font-size: 25px; }
-.repeat { margin-left: 2px; padding: 4px 8px; font-size: 11px; min-height: 28px; line-height: 1; white-space: nowrap; }
+.repeat { margin-left: 2px; width: 58px; flex: 0 0 58px; padding: 4px 0; font-size: 11px; min-height: 28px; line-height: 1; text-align: center; white-space: nowrap; }
 .repeat[data-mode="all"], .repeat[data-mode="one"] { color: var(--text); border-color: #56565f; background: rgba(255,255,255,.05); }
 .dialog { width: min(420px, calc(100% - 28px)); border: 1px solid var(--border); background: var(--surface); color: var(--text); border-radius: 16px; padding: 18px; }
 .dialog::backdrop { background: rgba(0,0,0,.65); backdrop-filter: blur(4px); }
@@ -104,5 +104,5 @@ h2 { font-size: 18px; margin: 0 0 3px; }
   .player-controls { gap: 8px; }
   .transport { width: 54px; height: 54px; font-size: 29px; }
   .primary-transport { width: 56px; height: 56px; font-size: 24px; }
-  .repeat { padding: 4px 7px; font-size: 10.5px; min-height: 27px; }
+  .repeat { width: 58px; flex-basis: 58px; padding: 4px 0; font-size: 10.5px; min-height: 27px; }
 }
