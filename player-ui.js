@@ -71,9 +71,17 @@
 
   if (!document.querySelector('script[data-playlist-enhancements]')) {
     const script = document.createElement('script');
-    script.src = './playlist-enhancements.js?v=1';
+    script.src = './playlist-enhancements.js?v=3';
     script.defer = true;
     script.dataset.playlistEnhancements = '1';
+    document.head.appendChild(script);
+  }
+
+  if (!document.querySelector('script[data-settings-ui]')) {
+    const script = document.createElement('script');
+    script.src = './settings-ui.js?v=1';
+    script.defer = true;
+    script.dataset.settingsUi = '1';
     document.head.appendChild(script);
   }
 })();
