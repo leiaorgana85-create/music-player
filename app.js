@@ -26,12 +26,13 @@
   };
 
   const els = Object.fromEntries([
-    'audio','connectionLabel','statusDetail','connectBtn','refreshBtn','settingsBtn','searchInput','downloadAllBtn','tabs','viewTitle','viewCount','shuffleBtn','selectBtn','bulkBar','selectedCount','bulkAddBtn','bulkRemoveBtn','bulkCancelBtn','progressMessage','trackList','emptyState','player','nowTitle','nowMeta','nowStatus','playerFavoriteBtn','queueBtn','playerPlaylistBtn','seek','prevBtn','playBtn','nextBtn','repeatBtn','playlistDialog','playlistDialogTitle','playlistChoices','playNextBtn','savePlaylistsBtn','queueDialog','queueList','closeQueueBtn','settingsDialog','settingsForm','clientIdInput','folderIdInput','exportBackupBtn','importBackupBtn','backupFileInput','saveSettingsBtn','trackTemplate'
+    'audio','connectionLabel','statusDetail','connectBtn','refreshBtn','settingsBtn','searchInput','downloadAllBtn','tabs','viewTitle','viewCount','shuffleBtn','selectBtn','downloadViewBtn','bulkBar','selectedCount','bulkAddBtn','bulkRemoveBtn','bulkRemoveDownloadBtn','bulkCancelBtn','progressMessage','trackList','emptyState','player','nowTitle','nowMeta','nowStatus','playerFavoriteBtn','playerPlaylistBtn','seek','prevBtn','playBtn','nextBtn','repeatBtn','playlistDialog','playlistDialogTitle','playlistChoices','savePlaylistsBtn','settingsDialog','settingsForm','clientIdInput','folderIdInput','exportBackupBtn','importBackupBtn','backupFileInput','saveSettingsBtn','trackTemplate'
   ].map(id => [id, document.getElementById(id)]));
 
   let db;
   let library = [];
   let offlineIds = new Set();
+  let offlineBytes = 0;
   let playlists = loadPlaylists();
   let favorites = loadFavorites();
   let settings = loadSettings();
@@ -138,6 +139,7 @@
   async function dbGetAll(store) { return reqP(tx(store).getAll()); }
   async function dbGet(store, key) { return reqP(tx(store).get(key)); }
   async function dbPut(store, value) { return reqP(tx(store, 'readwrite').put(value)); }
+  async function dbDelete(store, key) { return reqP(tx(store, 'readwrite').delete(key)); }
 
   function cleanTitle(name) {
     return name.replace(/\.(mp3|m4a|aac|flac|wav)$/i, '');
@@ -145,8 +147,19 @@
 
   function bytes(n) {
     const x = Number(n || 0);
-    if (!x) return '';
-    return x >= 1024 * 1024 ? `${(x / 1024 / 1024).toFixed(1)} MB` : `${Math.round(x / 1024)} KB`;
+    if (!x) return '0 KB';
+    if (x >= 1024 * 1024 * 1024) return `${(x / 1024 / 1024 / 1024).toFixed(2)} GB`;
+    if (x >= 1024 * 1024) return `${(x / 1024 / 1024).toFixed(1)} MB`;
+    return `${Math.round(x / 1024)} KB`;
+  }
+
+  function audioValueSize(value) {
+    if (!value) return 0;
+    if (value.__musicBytes instanceof ArrayBuffer) return value.__musicBytes.byteLength;
+    if (value instanceof ArrayBuffer) return value.byteLength;
+    if (ArrayBuffer.isView(value)) return value.byteLength;
+    if (typeof Blob !== 'undefined' && value instanceof Blob) return value.size;
+    return 0;
   }
 
   function displayTitle(track) {
@@ -164,7 +177,7 @@
   function displayMeta(track) {
     const tags = [displayArtist(track), displayAlbum(track)].filter(Boolean);
     if (tags.length) return tags.join(' • ');
-    return [bytes(track?.size), offlineIds.has(track?.id) ? 'Offline' : 'Drive'].filter(Boolean).join(' • ');
+    return [track?.size ? bytes(track.size) : '', offlineIds.has(track?.id) ? 'Offline' : 'Drive'].filter(Boolean).join(' • ');
   }
 
   function newestTimestamp(track) {
@@ -180,6 +193,10 @@
     els.statusDetail.textContent = detail;
   }
 
+  function statusDetail() {
+    return `${library.length} songs • ${offlineIds.size} downloaded • ${bytes(offlineBytes)} offline`;
+  }
+
   function showProgress(text = '') {
     els.progressMessage.textContent = text;
     els.progressMessage.classList.toggle('hidden', !text);
@@ -192,15 +209,16 @@
     if (timing) timing.libraryRead = performance.now() - mark;
 
     mark = performance.now();
-    offlineIds = new Set((await dbGetAll('audio')).map(x => x.id));
+    const audioRows = await dbGetAll('audio');
+    offlineIds = new Set(audioRows.map(x => x.id));
+    offlineBytes = audioRows.reduce((sum, row) => sum + audioValueSize(row.blob), 0);
     if (timing) timing.audioRead = performance.now() - mark;
 
     mark = performance.now();
     render();
     if (timing) timing.render = performance.now() - mark;
 
-    const offlineCount = offlineIds.size;
-    setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', `${library.length} songs • ${offlineCount} downloaded`);
+    setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', statusDetail());
   }
 
   async function loadGoogleIdentity() {
@@ -308,7 +326,7 @@
         });
       }
       await loadSavedLibrary();
-      setStatus('Google Drive connected', `${library.length} songs • ${offlineIds.size} downloaded`);
+      setStatus('Google Drive connected', statusDetail());
       showProgress(`Updated. ${incoming.length} songs received from Drive; ${library.length} kept locally.`);
       setTimeout(() => showProgress(''), 3000);
       scheduleMetadataScan();
@@ -371,6 +389,7 @@
     const blob = await (await driveFetch(url)).blob();
     await dbPut('audio', { id: track.id, blob, modifiedTime: track.modifiedTime || null });
     offlineIds.add(track.id);
+    offlineBytes += audioValueSize(blob);
     await applyEmbeddedMetadata(track, blob, false);
     render();
     if (!quiet) {
@@ -379,29 +398,48 @@
     }
   }
 
-  async function downloadAll() {
-    if (!library.length) return;
+  async function downloadTracks(tracks, doneMessage) {
+    const todo = tracks.filter(t => !offlineIds.has(t.id));
+    if (!todo.length) {
+      showProgress('Everything in this view is already downloaded.');
+      setTimeout(() => showProgress(''), 1800);
+      return;
+    }
+    if (!navigator.onLine) return alert('Connect to the internet to download songs.');
+    if (navigator.storage?.persist) {
+      try { await navigator.storage.persist(); } catch {}
+    }
     try {
-      if (navigator.storage?.persist) {
-        try { await navigator.storage.persist(); } catch {}
-      }
-      const todo = library.filter(t => !offlineIds.has(t.id));
-      if (!todo.length) return showProgress('All songs are already downloaded.');
       for (let i = 0; i < todo.length; i++) {
         showProgress(`Downloading ${i + 1} of ${todo.length}: ${displayTitle(todo[i])}`);
         await downloadTrack(todo[i], true);
       }
-      showProgress(`Offline ready: ${offlineIds.size} songs downloaded.`);
-      setStatus(accessToken ? 'Google Drive connected' : 'Saved library', `${library.length} songs • ${offlineIds.size} downloaded`);
+      setStatus(accessToken ? 'Google Drive connected' : 'Saved library', statusDetail());
+      showProgress(doneMessage || `Offline ready: ${offlineIds.size} songs • ${bytes(offlineBytes)}.`);
+      setTimeout(() => showProgress(''), 2500);
     } catch (e) {
       console.error(e);
+      showProgress('');
       alert(e.message);
     }
+  }
+
+  async function downloadAll() {
+    if (!library.length) return;
+    await downloadTracks(library, `Offline ready: ${library.length} songs available on this device.`);
+  }
+
+  async function downloadCurrentView() {
+    const rows = currentTracks();
+    if (!rows.length) return;
+    const label = currentView === 'FAVORITES' ? 'Favorites' : currentView;
+    await downloadTracks(rows, `${label} is available offline.`);
   }
 
   function currentTracks() {
     let rows;
     if (currentView === 'ALL') rows = [...library];
+    else if (currentView === 'DOWNLOADED') rows = library.filter(t => offlineIds.has(t.id));
     else if (currentView === 'FAVORITES') rows = favorites.map(id => library.find(t => t.id === id)).filter(Boolean);
     else rows = (playlists[currentView] || []).map(id => library.find(t => t.id === id)).filter(Boolean);
 
@@ -413,10 +451,12 @@
   }
 
   function updateBulkBar() {
+    const hasDownloadedSelection = [...selectedIds].some(id => offlineIds.has(id));
     els.selectedCount.textContent = `${selectedIds.size} selected`;
     els.bulkBar.classList.toggle('hidden', !selectionMode);
-    els.bulkRemoveBtn.classList.toggle('hidden', currentView === 'ALL');
+    els.bulkRemoveBtn.classList.toggle('hidden', currentView === 'ALL' || currentView === 'DOWNLOADED');
     els.bulkRemoveBtn.textContent = currentView === 'FAVORITES' ? 'Remove favorite' : 'Remove from playlist';
+    els.bulkRemoveDownloadBtn.classList.toggle('hidden', !hasDownloadedSelection);
     els.selectBtn.textContent = selectionMode ? 'Done' : 'Select';
   }
 
@@ -433,10 +473,20 @@
     render();
   }
 
+  function viewTitle() {
+    if (currentView === 'ALL') return 'All songs';
+    if (currentView === 'DOWNLOADED') return 'Downloaded';
+    if (currentView === 'FAVORITES') return 'Favorites';
+    return currentView;
+  }
+
   function render() {
     const rows = currentTracks();
-    els.viewTitle.textContent = currentView === 'ALL' ? 'All songs' : currentView === 'FAVORITES' ? 'Favorites' : currentView;
-    els.viewCount.textContent = `${rows.length} song${rows.length === 1 ? '' : 's'}`;
+    els.viewTitle.textContent = viewTitle();
+    els.viewCount.textContent = currentView === 'DOWNLOADED'
+      ? `${rows.length} song${rows.length === 1 ? '' : 's'} • ${bytes(offlineBytes)} offline audio`
+      : `${rows.length} song${rows.length === 1 ? '' : 's'}`;
+    els.downloadViewBtn.classList.toggle('hidden', currentView === 'ALL' || currentView === 'DOWNLOADED');
     els.trackList.innerHTML = '';
     els.emptyState.classList.toggle('hidden', rows.length > 0);
 
@@ -488,105 +538,6 @@
 
   function queueIndex() {
     return queue.indexOf(currentTrackId);
-  }
-
-  function playNext(id) {
-    if (!id) return;
-    if (!currentTrackId) return playTrack(id);
-    if (id === currentTrackId) return;
-    const currentIndex = queueIndex();
-    if (currentIndex < 0) queue = [currentTrackId];
-    queue = queue.filter((queuedId, index) => queuedId !== id || index <= queueIndex());
-    const insertAt = Math.max(0, queueIndex()) + 1;
-    queue.splice(insertAt, 0, id);
-    showProgress(`${displayTitle(library.find(t => t.id === id))} will play next.`);
-    setTimeout(() => showProgress(''), 1600);
-    renderQueueDialog();
-  }
-
-  function moveQueueItem(index, direction) {
-    const currentIndex = queueIndex();
-    const target = index + direction;
-    if (index <= currentIndex || target <= currentIndex || target >= queue.length) return;
-    [queue[index], queue[target]] = [queue[target], queue[index]];
-    renderQueueDialog();
-  }
-
-  function removeQueueItem(index) {
-    if (index <= queueIndex() || index >= queue.length) return;
-    queue.splice(index, 1);
-    renderQueueDialog();
-  }
-
-  function renderQueueDialog() {
-    if (!els.queueList) return;
-    els.queueList.innerHTML = '';
-    if (!currentTrackId || !queue.length) {
-      const empty = document.createElement('div');
-      empty.className = 'queue-empty';
-      empty.textContent = 'Nothing is playing yet.';
-      els.queueList.appendChild(empty);
-      return;
-    }
-
-    const currentIndex = queueIndex();
-    const currentTrack = library.find(t => t.id === currentTrackId);
-    if (currentTrack) {
-      const now = document.createElement('div');
-      now.className = 'queue-row queue-now';
-      now.innerHTML = `<div><strong>Now Playing</strong><span></span></div>`;
-      now.querySelector('span').textContent = displayTitle(currentTrack);
-      els.queueList.appendChild(now);
-    }
-
-    const upcoming = queue.slice(currentIndex + 1);
-    if (!upcoming.length) {
-      const empty = document.createElement('div');
-      empty.className = 'queue-empty';
-      empty.textContent = 'No songs up next.';
-      els.queueList.appendChild(empty);
-      return;
-    }
-
-    upcoming.forEach((id, offset) => {
-      const index = currentIndex + 1 + offset;
-      const track = library.find(t => t.id === id);
-      if (!track) return;
-      const row = document.createElement('div');
-      row.className = 'queue-row';
-      const text = document.createElement('div');
-      text.className = 'queue-text';
-      const title = document.createElement('span');
-      title.className = 'queue-title';
-      title.textContent = displayTitle(track);
-      const meta = document.createElement('span');
-      meta.className = 'queue-meta';
-      meta.textContent = displayArtist(track);
-      text.append(title, meta);
-
-      const actions = document.createElement('div');
-      actions.className = 'queue-actions';
-      const up = document.createElement('button');
-      up.type = 'button';
-      up.textContent = '↑';
-      up.setAttribute('aria-label', 'Move earlier');
-      up.disabled = offset === 0;
-      up.addEventListener('click', () => moveQueueItem(index, -1));
-      const down = document.createElement('button');
-      down.type = 'button';
-      down.textContent = '↓';
-      down.setAttribute('aria-label', 'Move later');
-      down.disabled = offset === upcoming.length - 1;
-      down.addEventListener('click', () => moveQueueItem(index, 1));
-      const remove = document.createElement('button');
-      remove.type = 'button';
-      remove.textContent = '×';
-      remove.setAttribute('aria-label', 'Remove from Up Next');
-      remove.addEventListener('click', () => removeQueueItem(index));
-      actions.append(up, down, remove);
-      row.append(text, actions);
-      els.queueList.appendChild(row);
-    });
   }
 
   async function sourceForTrack(track) {
@@ -646,7 +597,7 @@
       navigator.mediaSession.metadata = new MediaMetadata({
         title: displayTitle(track),
         artist: displayArtist(track) || 'MUSIC',
-        album: displayAlbum(track) || (currentView === 'ALL' ? 'Library' : currentView === 'FAVORITES' ? 'Favorites' : currentView),
+        album: displayAlbum(track) || (currentView === 'ALL' ? 'Library' : viewTitle()),
         artwork: artworkUrl ? [{ src: artworkUrl, type: artworkMime }] : []
       });
     } catch {}
@@ -680,7 +631,6 @@
     dialogMode = mode;
     els.playlistDialogTitle.textContent = mode === 'add' ? `Add ${trackIds.length} songs to playlists` : 'Song options';
     els.playlistChoices.innerHTML = '';
-    els.playNextBtn.classList.toggle('hidden', mode !== 'single' || !currentTrackId || trackIds[0] === currentTrackId);
 
     for (const name of PLAYLIST_NAMES) {
       const label = document.createElement('label');
@@ -723,7 +673,7 @@
   }
 
   function removeSelectedFromCurrentPlaylist() {
-    if (currentView === 'ALL' || !selectedIds.size) return;
+    if (currentView === 'ALL' || currentView === 'DOWNLOADED' || !selectedIds.size) return;
     if (currentView === 'FAVORITES') {
       favorites = favorites.filter(id => !selectedIds.has(id));
       saveFavorites();
@@ -732,6 +682,26 @@
       savePlaylists();
     }
     setSelectionMode(false);
+  }
+
+  async function removeSelectedDownloads() {
+    const ids = [...selectedIds].filter(id => offlineIds.has(id));
+    if (!ids.length) return;
+    const noun = ids.length === 1 ? 'song' : 'songs';
+    if (!confirm(`Remove the downloaded audio for ${ids.length} ${noun}?\n\nThe songs will stay in your library, playlists, and Favorites.`)) return;
+    try {
+      for (const id of ids) await dbDelete('audio', id);
+      await loadSavedLibrary();
+      selectedIds.clear();
+      selectionMode = false;
+      updateBulkBar();
+      render();
+      showProgress(`Removed ${ids.length} offline ${noun}. Library and playlists were kept.`);
+      setTimeout(() => showProgress(''), 2400);
+    } catch (error) {
+      console.error(error);
+      alert('Could not remove the selected downloads.');
+    }
   }
 
   function updatePlayButton() {
@@ -888,6 +858,7 @@
 
     els.refreshBtn.addEventListener('click', refreshFromDrive);
     els.downloadAllBtn.addEventListener('click', downloadAll);
+    els.downloadViewBtn.addEventListener('click', downloadCurrentView);
     els.searchInput?.addEventListener('input', render);
 
     els.tabs.addEventListener('click', e => {
@@ -916,6 +887,7 @@
       if (selectedIds.size) openPlaylistDialog([...selectedIds], 'add');
     });
     els.bulkRemoveBtn.addEventListener('click', removeSelectedFromCurrentPlaylist);
+    els.bulkRemoveDownloadBtn.addEventListener('click', removeSelectedDownloads);
 
     els.playBtn.addEventListener('click', () => {
       if (!currentTrackId && library[0]) return playTrack(library[0].id);
@@ -925,18 +897,7 @@
     els.nextBtn.addEventListener('click', () => nextTrack(false));
     els.repeatBtn.addEventListener('click', cycleRepeat);
     els.playerFavoriteBtn.addEventListener('click', () => currentTrackId && toggleFavorite(currentTrackId));
-    els.queueBtn.addEventListener('click', () => {
-      renderQueueDialog();
-      els.queueDialog.showModal();
-    });
-    els.closeQueueBtn.addEventListener('click', () => els.queueDialog.close());
     els.playerPlaylistBtn.addEventListener('click', () => currentTrackId && openPlaylistDialog([currentTrackId], 'single'));
-    els.playNextBtn.addEventListener('click', () => {
-      const id = dialogTrackIds[0];
-      if (id) playNext(id);
-      els.playlistDialog.close();
-      dialogTrackIds = [];
-    });
     els.savePlaylistsBtn.addEventListener('click', saveDialogPlaylists);
 
     els.audio.addEventListener('play', updatePlayButton);
@@ -952,8 +913,8 @@
       seekDragging = false;
     });
 
-    window.addEventListener('online', () => setStatus(accessToken ? 'Google Drive connected' : 'Online', `${library.length} saved songs • refresh available`));
-    window.addEventListener('offline', () => setStatus('Offline mode', `${offlineIds.size} downloaded songs available`));
+    window.addEventListener('online', () => setStatus(accessToken ? 'Google Drive connected' : 'Online', statusDetail()));
+    window.addEventListener('offline', () => setStatus('Offline mode', `${offlineIds.size} downloaded songs • ${bytes(offlineBytes)}`));
 
     if ('mediaSession' in navigator) {
       try {
@@ -986,7 +947,7 @@
     }
 
     if (settings.clientId) {
-      setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', `${library.length} songs • ${offlineIds.size} downloaded`);
+      setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', statusDetail());
     } else {
       setStatus('Setup required', '');
     }
