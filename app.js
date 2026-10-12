@@ -2,15 +2,29 @@
   'use strict';
 
   const DEFAULT_FOLDER_ID = '1W8s8gT5p60nOqXv_VvPy6l9uofZAog9E';
-  const PLAYLIST_NAMES = ['GYM', 'CHILL', 'BOSSANOVA'];
+  const PLAYLIST_NAMES = ['1 - GYM', '2 - FEEL GOOD', '3 - BOSSA'];
+  const PLAYLIST_ALIASES = {
+    '1 - GYM': ['1 - GYM', 'GYM'],
+    '2 - FEEL GOOD': ['2 - FEEL GOOD', 'FEEL GOOD', 'CHILL'],
+    '3 - BOSSA': ['3 - BOSSA', 'BOSSA', 'BOSSANOVA']
+  };
   const SUPPORTED_MIMES = new Set(['audio/mpeg', 'audio/mp4', 'audio/x-m4a', 'audio/flac', 'audio/x-flac']);
   const DB_NAME = 'music-pwa-db';
   const DB_VERSION = 1;
   const SETTINGS_KEY = 'musicPwaSettings';
   const PLAYLISTS_KEY = 'musicPwaPlaylists';
+  const bootStart = window.__musicBootStart || performance.now();
+  const startupTiming = {
+    scriptDelay: performance.now() - bootStart,
+    dbOpen: 0,
+    libraryRead: 0,
+    audioRead: 0,
+    render: 0,
+    ready: 0
+  };
 
   const els = Object.fromEntries([
-    'audio','connectionLabel','statusDetail','connectBtn','refreshBtn','settingsBtn','searchInput','downloadAllBtn','tabs','viewTitle','viewCount','shuffleBtn','progressMessage','trackList','emptyState','player','nowTitle','nowStatus','playerPlaylistBtn','seek','prevBtn','playBtn','nextBtn','repeatBtn','playlistDialog','playlistChoices','savePlaylistsBtn','settingsDialog','settingsForm','clientIdInput','folderIdInput','saveSettingsBtn','trackTemplate'
+    'audio','connectionLabel','statusDetail','connectBtn','refreshBtn','settingsBtn','downloadAllBtn','tabs','viewTitle','viewCount','shuffleBtn','selectBtn','bulkBar','selectedCount','bulkAddBtn','bulkRemoveBtn','bulkCancelBtn','progressMessage','trackList','emptyState','player','nowTitle','nowStatus','playerPlaylistBtn','seek','prevBtn','playBtn','nextBtn','repeatBtn','playlistDialog','playlistDialogTitle','playlistChoices','savePlaylistsBtn','settingsDialog','settingsForm','clientIdInput','folderIdInput','saveSettingsBtn','trackTemplate'
   ].map(id => [id, document.getElementById(id)]));
 
   let db;
@@ -26,8 +40,11 @@
   let queue = [];
   let shuffle = false;
   let repeatMode = 'off'; // off | all | one
-  let dialogTrackId = null;
+  let dialogTrackIds = [];
+  let dialogMode = 'single'; // single | add
   let seekDragging = false;
+  let selectionMode = false;
+  let selectedIds = new Set();
 
   function loadSettings() {
     try {
@@ -44,7 +61,16 @@
   function loadPlaylists() {
     try {
       const saved = JSON.parse(localStorage.getItem(PLAYLISTS_KEY) || '{}');
-      return Object.fromEntries(PLAYLIST_NAMES.map(name => [name, Array.isArray(saved[name]) ? saved[name] : []]));
+      const migrated = {};
+      for (const name of PLAYLIST_NAMES) {
+        const ids = new Set();
+        for (const alias of PLAYLIST_ALIASES[name]) {
+          if (Array.isArray(saved[alias])) saved[alias].forEach(id => ids.add(id));
+        }
+        migrated[name] = [...ids];
+      }
+      localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(migrated));
+      return migrated;
     } catch {
       return Object.fromEntries(PLAYLIST_NAMES.map(name => [name, []]));
     }
@@ -93,6 +119,14 @@
     return x >= 1024 * 1024 ? `${(x / 1024 / 1024).toFixed(1)} MB` : `${Math.round(x / 1024)} KB`;
   }
 
+  function secs(ms) {
+    return `${(ms / 1000).toFixed(1)}s`;
+  }
+
+  function startupDetail() {
+    return `Load ${secs(startupTiming.ready)} • pre-app ${secs(startupTiming.scriptDelay)} • DB ${secs(startupTiming.dbOpen)} • list ${secs(startupTiming.libraryRead)} • audio ${secs(startupTiming.audioRead)} • render ${secs(startupTiming.render)}`;
+  }
+
   function setStatus(title, detail) {
     els.connectionLabel.textContent = title;
     els.statusDetail.textContent = detail;
@@ -103,11 +137,20 @@
     els.progressMessage.classList.toggle('hidden', !text);
   }
 
-  async function loadSavedLibrary() {
+  async function loadSavedLibrary(timing = null) {
+    let mark = performance.now();
     library = (await dbGetAll('library')).sort((a, b) => a.name.localeCompare(b.name));
+    if (timing) timing.libraryRead = performance.now() - mark;
+
+    mark = performance.now();
     offlineIds = new Set((await dbGetAll('audio')).map(x => x.id));
+    if (timing) timing.audioRead = performance.now() - mark;
+
+    mark = performance.now();
     prunePlaylists();
     render();
+    if (timing) timing.render = performance.now() - mark;
+
     const offlineCount = offlineIds.size;
     setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', `${library.length} songs • ${offlineCount} downloaded`);
   }
@@ -280,12 +323,29 @@
   }
 
   function currentTracks() {
-    let rows = currentView === 'ALL'
+    return currentView === 'ALL'
       ? [...library]
       : playlists[currentView].map(id => library.find(t => t.id === id)).filter(Boolean);
-    const q = els.searchInput.value.trim().toLowerCase();
-    if (q) rows = rows.filter(t => t.title.toLowerCase().includes(q));
-    return rows;
+  }
+
+  function updateBulkBar() {
+    els.selectedCount.textContent = `${selectedIds.size} selected`;
+    els.bulkBar.classList.toggle('hidden', !selectionMode);
+    els.bulkRemoveBtn.classList.toggle('hidden', currentView === 'ALL');
+    els.selectBtn.textContent = selectionMode ? 'Done' : 'Select';
+  }
+
+  function setSelectionMode(on) {
+    selectionMode = on;
+    if (!on) selectedIds.clear();
+    updateBulkBar();
+    render();
+  }
+
+  function toggleSelection(id) {
+    selectedIds.has(id) ? selectedIds.delete(id) : selectedIds.add(id);
+    updateBulkBar();
+    render();
   }
 
   function render() {
@@ -299,13 +359,21 @@
       const node = els.trackTemplate.content.firstElementChild.cloneNode(true);
       node.dataset.id = track.id;
       if (track.id === currentTrackId) node.classList.add('playing');
+      if (selectionMode) node.classList.add('selecting');
+      if (selectedIds.has(track.id)) node.classList.add('selected');
       node.querySelector('.track-index').textContent = i + 1;
       node.querySelector('.track-title').textContent = track.title;
       node.querySelector('.track-meta').textContent = [bytes(track.size), offlineIds.has(track.id) ? 'Offline' : 'Drive'].filter(Boolean).join(' • ');
       node.querySelector('.offline-badge').classList.toggle('visible', offlineIds.has(track.id));
-      node.querySelector('.track-play').addEventListener('click', () => playTrack(track.id));
-      node.querySelector('.track-body').addEventListener('click', () => playTrack(track.id));
-      node.querySelector('.track-menu').addEventListener('click', () => openPlaylistDialog(track.id));
+      node.querySelector('.select-glyph').textContent = selectedIds.has(track.id) ? '✓' : '○';
+
+      const primaryAction = () => selectionMode ? toggleSelection(track.id) : playTrack(track.id);
+      node.querySelector('.track-play').addEventListener('click', primaryAction);
+      node.querySelector('.track-body').addEventListener('click', primaryAction);
+      node.querySelector('.track-menu').addEventListener('click', () => {
+        if (selectionMode) toggleSelection(track.id);
+        else openPlaylistDialog([track.id], 'single');
+      });
       els.trackList.appendChild(node);
     });
   }
@@ -392,16 +460,19 @@
     playTrack(id, true);
   }
 
-  function openPlaylistDialog(trackId) {
-    dialogTrackId = trackId;
+  function openPlaylistDialog(trackIds, mode = 'single') {
+    dialogTrackIds = [...trackIds];
+    dialogMode = mode;
+    els.playlistDialogTitle.textContent = mode === 'add' ? `Add ${trackIds.length} songs to playlists` : 'Playlists';
     els.playlistChoices.innerHTML = '';
+
     for (const name of PLAYLIST_NAMES) {
       const label = document.createElement('label');
       label.className = 'playlist-choice';
       const cb = document.createElement('input');
       cb.type = 'checkbox';
       cb.value = name;
-      cb.checked = playlists[name].includes(trackId);
+      cb.checked = mode === 'single' && playlists[name].includes(trackIds[0]);
       const span = document.createElement('span');
       span.textContent = name;
       label.append(cb, span);
@@ -411,15 +482,35 @@
   }
 
   function saveDialogPlaylists() {
-    if (!dialogTrackId) return;
+    if (!dialogTrackIds.length) return;
     const checked = new Set([...els.playlistChoices.querySelectorAll('input:checked')].map(x => x.value));
-    for (const name of PLAYLIST_NAMES) {
-      const set = new Set(playlists[name]);
-      checked.has(name) ? set.add(dialogTrackId) : set.delete(dialogTrackId);
-      playlists[name] = [...set];
+
+    if (dialogMode === 'add') {
+      for (const name of checked) {
+        const set = new Set(playlists[name]);
+        dialogTrackIds.forEach(id => set.add(id));
+        playlists[name] = [...set];
+      }
+    } else {
+      const id = dialogTrackIds[0];
+      for (const name of PLAYLIST_NAMES) {
+        const set = new Set(playlists[name]);
+        checked.has(name) ? set.add(id) : set.delete(id);
+        playlists[name] = [...set];
+      }
     }
+
     savePlaylists();
-    render();
+    if (dialogMode === 'add') setSelectionMode(false);
+    else render();
+    dialogTrackIds = [];
+  }
+
+  function removeSelectedFromCurrentPlaylist() {
+    if (currentView === 'ALL' || !selectedIds.size) return;
+    playlists[currentView] = playlists[currentView].filter(id => !selectedIds.has(id));
+    savePlaylists();
+    setSelectionMode(false);
   }
 
   function updatePlayButton() {
@@ -463,12 +554,12 @@
 
     els.refreshBtn.addEventListener('click', refreshFromDrive);
     els.downloadAllBtn.addEventListener('click', downloadAll);
-    els.searchInput.addEventListener('input', render);
 
     els.tabs.addEventListener('click', e => {
       const tab = e.target.closest('.tab');
       if (!tab) return;
       currentView = tab.dataset.view;
+      setSelectionMode(false);
       [...els.tabs.querySelectorAll('.tab')].forEach(x => x.classList.toggle('active', x === tab));
       render();
     });
@@ -478,6 +569,13 @@
       els.shuffleBtn.setAttribute('aria-pressed', String(shuffle));
     });
 
+    els.selectBtn.addEventListener('click', () => setSelectionMode(!selectionMode));
+    els.bulkCancelBtn.addEventListener('click', () => setSelectionMode(false));
+    els.bulkAddBtn.addEventListener('click', () => {
+      if (selectedIds.size) openPlaylistDialog([...selectedIds], 'add');
+    });
+    els.bulkRemoveBtn.addEventListener('click', removeSelectedFromCurrentPlaylist);
+
     els.playBtn.addEventListener('click', () => {
       if (!currentTrackId && library[0]) return playTrack(library[0].id);
       els.audio.paused ? els.audio.play() : els.audio.pause();
@@ -485,7 +583,7 @@
     els.prevBtn.addEventListener('click', prevTrack);
     els.nextBtn.addEventListener('click', () => nextTrack(false));
     els.repeatBtn.addEventListener('click', cycleRepeat);
-    els.playerPlaylistBtn.addEventListener('click', () => currentTrackId && openPlaylistDialog(currentTrackId));
+    els.playerPlaylistBtn.addEventListener('click', () => currentTrackId && openPlaylistDialog([currentTrackId], 'single'));
     els.savePlaylistsBtn.addEventListener('click', saveDialogPlaylists);
 
     els.audio.addEventListener('play', updatePlayButton);
@@ -520,17 +618,22 @@
   async function init() {
     bindEvents();
     updateRepeatButton();
+    updateBulkBar();
+
+    let mark = performance.now();
     db = await openDb();
-    await loadSavedLibrary();
+    startupTiming.dbOpen = performance.now() - mark;
+    await loadSavedLibrary(startupTiming);
+    startupTiming.ready = performance.now() - bootStart;
 
     if ('serviceWorker' in navigator) {
       try { await navigator.serviceWorker.register('./sw.js'); } catch (e) { console.warn('Service worker unavailable', e); }
     }
 
-    if (settings.clientId && navigator.onLine) {
-      setStatus('Saved library', `${library.length} songs • tap Connect Drive to refresh`);
-    } else if (!settings.clientId) {
-      setStatus('Setup required', `${library.length} saved songs • add your Google OAuth Client ID in Settings`);
+    if (settings.clientId) {
+      setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', startupDetail());
+    } else {
+      setStatus('Setup required', startupDetail());
     }
   }
 
