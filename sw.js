@@ -1,4 +1,4 @@
-const CACHE = 'music-shell-v6';
+const CACHE = 'music-shell-v7';
 const SHELL = [
   './', './index.html', './styles.css', './app.js?v=5', './manifest.json'
 ];
