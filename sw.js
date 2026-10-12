@@ -1,7 +1,8 @@
-const CACHE = 'music-shell-v13';
-const SHELL = [
-  './', './index.html', './styles.css?v=10', './app.js?v=10', './manifest.json'
-];
+const CACHE = 'music-shell-v14';
+const OFFLINE_HTML = './index.html?v=11';
+const APP_JS = './app.js?v=10';
+const STYLES = './styles.css?v=10';
+const SHELL = [OFFLINE_HTML, STYLES, APP_JS, './manifest.json'];
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -21,16 +22,21 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  // Prefer fresh app code when online, but fall back to the cached shell offline.
+  if (req.mode === 'navigate') {
+    event.respondWith(
+      fetch(req).catch(() => caches.match(OFFLINE_HTML))
+    );
+    return;
+  }
+
   event.respondWith(
     fetch(req).then(res => {
       const copy = res.clone();
-      caches.open(CACHE).then(cache => cache.put(req.mode === 'navigate' ? './index.html' : req, copy));
+      caches.open(CACHE).then(cache => cache.put(req, copy));
       return res;
     }).catch(async () => {
-      if (req.mode === 'navigate') return caches.match('./index.html');
-      if (url.pathname.endsWith('/app.js')) return caches.match('./app.js?v=10');
-      if (url.pathname.endsWith('/styles.css')) return caches.match('./styles.css?v=10');
+      if (url.pathname.endsWith('/app.js')) return caches.match(APP_JS);
+      if (url.pathname.endsWith('/styles.css')) return caches.match(STYLES);
       return caches.match(req);
     })
   );
