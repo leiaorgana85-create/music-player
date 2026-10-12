@@ -1,6 +1,6 @@
-const CACHE = 'music-shell-v2';
+const CACHE = 'music-shell-v5';
 const SHELL = [
-  './', './index.html', './styles.css', './app.js?v=2', './manifest.json'
+  './', './index.html', './styles.css', './app.js?v=4', './manifest.json'
 ];
 
 self.addEventListener('install', event => {
@@ -21,20 +21,15 @@ self.addEventListener('fetch', event => {
   const url = new URL(req.url);
   if (url.origin !== self.location.origin) return;
 
-  if (req.mode === 'navigate') {
-    event.respondWith(fetch(req).then(res => {
-      const copy = res.clone();
-      caches.open(CACHE).then(cache => cache.put('./index.html', copy));
-      return res;
-    }).catch(() => caches.match('./index.html')));
-    return;
-  }
-
+  // Prefer fresh app code when online, but fall back to the cached shell offline.
   event.respondWith(
-    caches.match(req).then(cached => cached || fetch(req).then(res => {
+    fetch(req).then(res => {
       const copy = res.clone();
-      caches.open(CACHE).then(cache => cache.put(req, copy));
+      caches.open(CACHE).then(cache => cache.put(req.mode === 'navigate' ? './index.html' : req, copy));
       return res;
-    }))
+    }).catch(async () => {
+      if (req.mode === 'navigate') return caches.match('./index.html');
+      return (await caches.match(req)) || caches.match(url.pathname.endsWith('/app.js') ? './app.js?v=4' : req);
+    })
   );
 });
