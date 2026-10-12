@@ -8,7 +8,7 @@
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
   <meta name="apple-mobile-web-app-title" content="MUSIC" />
   <link rel="manifest" href="manifest.json" />
-  <link rel="stylesheet" href="styles.css?v=14" />
+  <link rel="stylesheet" href="styles.css?v=15" />
   <title>MUSIC</title>
   <script>window.__musicBootStart = performance.now();</script>
 </head>
@@ -17,7 +17,7 @@
     <header class="topbar">
       <div>
         <div class="eyebrow">PERSONAL PLAYER</div>
-        <h1>MUSIC <span class="cat-icon" aria-hidden="true">🐱</span></h1>
+        <h1>LEXI MUSIC <span class="cat-icon" aria-hidden="true">🐱</span></h1>
       </div>
       <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙︎</button>
     </header>
@@ -36,8 +36,8 @@
     </section>
 
     <nav id="tabs" class="tabs" aria-label="Library views">
-      <button class="tab active" data-view="ALL">ALL</button>
-      <button class="tab" data-view="GYM">GYM</button>
+      <button class="tab" data-view="ALL">ALL</button>
+      <button class="tab active" data-view="GYM">GYM</button>
       <button class="tab" data-view="FEEL GOOD">FEEL GOOD</button>
       <button class="tab" data-view="BOSSA">BOSSA</button>
     </nav>
@@ -49,12 +49,12 @@
     <main>
       <div id="viewHeader" class="view-header">
         <div>
-          <h2 id="viewTitle">All songs</h2>
+          <h2 id="viewTitle">GYM</h2>
           <div id="viewCount" class="muted">0 songs</div>
         </div>
         <div class="view-actions">
           <button id="selectBtn" class="small-control">Select</button>
-          <button id="shuffleBtn" class="small-control" aria-pressed="false">Shuffle</button>
+          <button id="shuffleBtn" class="small-control" aria-pressed="true">Shuffle</button>
         </div>
       </div>
 
@@ -86,7 +86,7 @@
       <button id="prevBtn" class="transport" aria-label="Previous">⏮</button>
       <button id="playBtn" class="transport primary-transport" aria-label="Play">▶</button>
       <button id="nextBtn" class="transport" aria-label="Next">⏭</button>
-      <button id="repeatBtn" class="repeat" aria-label="Repeat off">↻ Off</button>
+      <button id="repeatBtn" class="repeat" aria-label="Repeat all">↻ All</button>
     </div>
   </section>
 
@@ -296,6 +296,6 @@
       });
     })();
   </script>
-  <script src="app.js?v=13" defer></script>
+  <script src="app.js?v=14" defer></script>
 </body>
 </html>
