@@ -1,0 +1,127 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MUSIC" />
+  <link rel="manifest" href="manifest.json" />
+  <link rel="stylesheet" href="styles.css" />
+  <title>MUSIC</title>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">PERSONAL PLAYER</div>
+        <h1>MUSIC</h1>
+      </div>
+      <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙︎</button>
+    </header>
+
+    <section id="statusCard" class="status-card">
+      <div>
+        <div id="connectionLabel" class="status-title">Offline library</div>
+        <div id="statusDetail" class="status-detail">Loading saved songs…</div>
+      </div>
+      <div class="status-actions">
+        <button id="connectBtn" class="button secondary">Connect Drive</button>
+        <button id="refreshBtn" class="button" disabled>Refresh</button>
+      </div>
+    </section>
+
+    <section class="toolbar">
+      <input id="searchInput" type="search" placeholder="Search songs" autocomplete="off" />
+      <button id="downloadAllBtn" class="button secondary">Download all</button>
+    </section>
+
+    <nav id="tabs" class="tabs" aria-label="Library views">
+      <button class="tab active" data-view="ALL">ALL</button>
+      <button class="tab" data-view="GYM">GYM</button>
+      <button class="tab" data-view="CHILL">CHILL</button>
+      <button class="tab" data-view="BOSSANOVA">BOSSANOVA</button>
+    </nav>
+
+    <main>
+      <div id="viewHeader" class="view-header">
+        <div>
+          <h2 id="viewTitle">All songs</h2>
+          <div id="viewCount" class="muted">0 songs</div>
+        </div>
+        <button id="shuffleBtn" class="small-control" aria-pressed="false">Shuffle</button>
+      </div>
+      <div id="progressMessage" class="progress-message hidden"></div>
+      <div id="trackList" class="track-list"></div>
+      <div id="emptyState" class="empty-state hidden">No songs here yet.</div>
+    </main>
+  </div>
+
+  <section id="player" class="player hidden" aria-label="Now playing">
+    <div class="player-main">
+      <div class="player-text">
+        <div id="nowTitle" class="now-title">—</div>
+        <div id="nowStatus" class="now-status">—</div>
+      </div>
+      <button id="playerPlaylistBtn" class="icon-btn" aria-label="Add to playlist">＋</button>
+    </div>
+    <input id="seek" class="seek" type="range" min="0" max="1000" value="0" />
+    <div class="player-controls">
+      <button id="prevBtn" class="transport" aria-label="Previous">⏮</button>
+      <button id="playBtn" class="transport primary-transport" aria-label="Play">▶</button>
+      <button id="nextBtn" class="transport" aria-label="Next">⏭</button>
+      <button id="repeatBtn" class="repeat" aria-label="Repeat">Repeat: Off</button>
+    </div>
+  </section>
+
+  <audio id="audio" preload="metadata" playsinline></audio>
+
+  <dialog id="playlistDialog" class="dialog">
+    <form method="dialog">
+      <div class="dialog-title">Playlists</div>
+      <div id="playlistChoices" class="playlist-choices"></div>
+      <div class="dialog-actions">
+        <button value="cancel" class="button secondary">Cancel</button>
+        <button id="savePlaylistsBtn" value="default" class="button">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="dialog">
+    <form method="dialog" id="settingsForm">
+      <div class="dialog-title">Drive setup</div>
+      <label class="field">
+        <span>Google OAuth Client ID</span>
+        <input id="clientIdInput" type="text" placeholder="123…apps.googleusercontent.com" />
+      </label>
+      <label class="field">
+        <span>Drive folder ID</span>
+        <input id="folderIdInput" type="text" />
+      </label>
+      <p class="help">Your access token stays in memory only. The Client ID and folder ID are stored on this device.</p>
+      <div class="dialog-actions">
+        <button value="cancel" class="button secondary">Cancel</button>
+        <button id="saveSettingsBtn" value="default" class="button">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="trackTemplate">
+    <div class="track-row">
+      <button class="track-play" aria-label="Play">
+        <span class="track-index"></span>
+        <span class="play-glyph">▶</span>
+      </button>
+      <button class="track-body">
+        <span class="track-title"></span>
+        <span class="track-meta"></span>
+      </button>
+      <span class="offline-badge" title="Available offline">↓</span>
+      <button class="track-menu" aria-label="Playlist options">＋</button>
+    </div>
+  </template>
+
+  <script src="app.js" defer></script>
+</body>
+</html>
