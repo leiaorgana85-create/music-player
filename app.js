@@ -510,8 +510,10 @@
   }
 
   function updateRepeatButton() {
-    const label = repeatMode === 'off' ? 'Off' : repeatMode === 'all' ? 'All' : 'One';
-    els.repeatBtn.textContent = `Repeat: ${label}`;
+    const label = repeatMode === 'off' ? 'Off' : repeatMode === 'all' ? 'All' : '1';
+    els.repeatBtn.textContent = `↻ ${label}`;
+    els.repeatBtn.dataset.mode = repeatMode;
+    els.repeatBtn.setAttribute('aria-label', repeatMode === 'off' ? 'Repeat off' : repeatMode === 'all' ? 'Repeat all' : 'Repeat one');
   }
 
   function cycleRepeat() {
