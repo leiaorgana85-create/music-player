@@ -107,7 +107,6 @@
   async function dbGetAll(store) { return reqP(tx(store).getAll()); }
   async function dbGet(store, key) { return reqP(tx(store).get(key)); }
   async function dbPut(store, value) { return reqP(tx(store, 'readwrite').put(value)); }
-  async function dbDelete(store, key) { return reqP(tx(store, 'readwrite').delete(key)); }
 
   function cleanTitle(name) {
     return name.replace(/\.(mp3|m4a|aac|flac|wav)$/i, '');
@@ -156,23 +155,11 @@
     if (timing) timing.audioRead = performance.now() - mark;
 
     mark = performance.now();
-    prunePlaylists();
     render();
     if (timing) timing.render = performance.now() - mark;
 
     const offlineCount = offlineIds.size;
     setStatus(navigator.onLine ? 'Saved library' : 'Offline mode', `${library.length} songs • ${offlineCount} downloaded`);
-  }
-
-  function prunePlaylists() {
-    const valid = new Set(library.map(t => t.id));
-    let changed = false;
-    for (const name of PLAYLIST_NAMES) {
-      const filtered = playlists[name].filter(id => valid.has(id));
-      if (filtered.length !== playlists[name].length) changed = true;
-      playlists[name] = filtered;
-    }
-    if (changed) savePlaylists();
   }
 
   async function loadGoogleIdentity() {
@@ -259,23 +246,13 @@
     try {
       showProgress('Refreshing from Google Drive…');
       const incoming = await listDriveFolder();
+      if (!incoming.length) throw new Error('Drive returned no songs. Nothing was changed.');
       const oldMap = new Map(library.map(x => [x.id, x]));
-      const newIds = new Set(incoming.map(x => x.id));
 
-      for (const old of library) {
-        if (!newIds.has(old.id)) {
-          await dbDelete('library', old.id);
-          await dbDelete('audio', old.id);
-          offlineIds.delete(old.id);
-        }
-      }
-
+      // Merge only. A partial or transient Drive listing must never delete local
+      // library rows, offline audio, or playlist membership.
       for (const f of incoming) {
         const old = oldMap.get(f.id);
-        if (old && old.modifiedTime && old.modifiedTime !== f.modifiedTime && offlineIds.has(f.id)) {
-          await dbDelete('audio', f.id);
-          offlineIds.delete(f.id);
-        }
         await dbPut('library', {
           id: f.id,
           name: f.name,
@@ -283,13 +260,13 @@
           mimeType: f.mimeType,
           size: Number(f.size || 0),
           createdTime: f.createdTime || old?.createdTime || null,
-          modifiedTime: f.modifiedTime || null
+          modifiedTime: f.modifiedTime || old?.modifiedTime || null
         });
       }
       await loadSavedLibrary();
       setStatus('Google Drive connected', `${library.length} songs • ${offlineIds.size} downloaded`);
-      showProgress(`Updated. ${library.length} songs found in MUSIC.`);
-      setTimeout(() => showProgress(''), 2500);
+      showProgress(`Updated. ${incoming.length} songs received from Drive; ${library.length} kept locally.`);
+      setTimeout(() => showProgress(''), 3000);
     } catch (e) {
       console.error(e);
       showProgress('');
@@ -336,7 +313,7 @@
     let rows = currentView === 'ALL'
       ? [...library]
       : playlists[currentView].map(id => library.find(t => t.id === id)).filter(Boolean);
-    const q = els.searchInput.value.trim().toLowerCase();
+    const q = (els.searchInput?.value || '').trim().toLowerCase();
     if (q) rows = rows.filter(t => t.title.toLowerCase().includes(q));
     return rows;
   }
@@ -567,7 +544,7 @@
 
     els.refreshBtn.addEventListener('click', refreshFromDrive);
     els.downloadAllBtn.addEventListener('click', downloadAll);
-    els.searchInput.addEventListener('input', render);
+    els.searchInput?.addEventListener('input', render);
 
     els.tabs.addEventListener('click', e => {
       const tab = e.target.closest('.tab');
