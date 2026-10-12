@@ -95,6 +95,7 @@
     <form method="dialog">
       <div id="playlistDialogTitle" class="dialog-title">Playlists</div>
       <div id="playlistChoices" class="playlist-choices"></div>
+      <button id="removeDeviceBtn" type="button" class="button secondary hidden" style="width:100%; margin-top:16px;">Remove from device</button>
       <div class="dialog-actions">
         <button value="cancel" class="button secondary">Cancel</button>
         <button id="savePlaylistsBtn" value="default" class="button">Save</button>
@@ -171,6 +172,87 @@
         }
         return nativeCreateObjectURL(value);
       };
+    })();
+
+    // Deliberate per-song local removal. Drive refresh remains merge-only.
+    (() => {
+      const DB_NAME = 'music-pwa-db';
+      const DB_VERSION = 1;
+      const PLAYLISTS_KEY = 'musicPwaPlaylists';
+      const removeBtn = document.getElementById('removeDeviceBtn');
+      const playerPlaylistBtn = document.getElementById('playerPlaylistBtn');
+      let activeTrackId = null;
+      let activeTrackTitle = '';
+
+      function setActiveTrack(row) {
+        activeTrackId = row?.dataset?.id || null;
+        activeTrackTitle = row?.querySelector('.track-title')?.textContent?.trim() || 'this song';
+        removeBtn.classList.toggle('hidden', !activeTrackId);
+      }
+
+      document.addEventListener('click', event => {
+        const menu = event.target.closest('.track-menu');
+        if (menu) {
+          setActiveTrack(menu.closest('.track-row'));
+          return;
+        }
+        if (playerPlaylistBtn && event.target.closest('#playerPlaylistBtn')) {
+          setActiveTrack(document.querySelector('.track-row.playing'));
+        }
+      }, true);
+
+      function openDb() {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.open(DB_NAME, DB_VERSION);
+          request.onsuccess = () => resolve(request.result);
+          request.onerror = () => reject(request.error);
+        });
+      }
+
+      function finishTransaction(transaction) {
+        return new Promise((resolve, reject) => {
+          transaction.oncomplete = resolve;
+          transaction.onerror = () => reject(transaction.error);
+          transaction.onabort = () => reject(transaction.error || new Error('Removal was cancelled.'));
+        });
+      }
+
+      function removeFromPlaylists(id) {
+        try {
+          const saved = JSON.parse(localStorage.getItem(PLAYLISTS_KEY) || '{}');
+          for (const name of Object.keys(saved)) {
+            if (Array.isArray(saved[name])) saved[name] = saved[name].filter(trackId => trackId !== id);
+          }
+          localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(saved));
+        } catch (error) {
+          console.warn('Could not update playlists after removal', error);
+        }
+      }
+
+      removeBtn.addEventListener('click', async () => {
+        if (!activeTrackId) return;
+        const confirmed = confirm(
+          `Remove “${activeTrackTitle}” from this device?\n\n` +
+          'This deletes its local library entry, offline audio, and playlist memberships. It does NOT delete the Google Drive file. If the song is still in Drive, Refresh can add it back.'
+        );
+        if (!confirmed) return;
+
+        removeBtn.disabled = true;
+        try {
+          const db = await openDb();
+          const transaction = db.transaction(['library', 'audio'], 'readwrite');
+          transaction.objectStore('library').delete(activeTrackId);
+          transaction.objectStore('audio').delete(activeTrackId);
+          await finishTransaction(transaction);
+          db.close();
+          removeFromPlaylists(activeTrackId);
+          location.reload();
+        } catch (error) {
+          console.error(error);
+          alert('Could not remove this song from the device. Nothing else was changed.');
+          removeBtn.disabled = false;
+        }
+      });
     })();
   </script>
   <script src="app.js?v=13" defer></script>
