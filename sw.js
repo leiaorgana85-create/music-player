@@ -1,12 +1,73 @@
-const CACHE = 'music-shell-v34';
+const CACHE = 'music-shell-v35';
 const OFFLINE_HTML = './index.html?v=23';
 const APP_JS = './app.js?v=16';
-const DB_RESILIENCE_JS = './db-resilience.js?v=1';
 const META_JS = './metadata.js?v=1';
 const PLAYER_UI_JS = './player-ui.js?v=6';
 const PLAYLIST_JS = './playlist-enhancements.js?v=3';
 const STYLES = './styles.css?v=18';
-const SHELL = [OFFLINE_HTML, STYLES, APP_JS, DB_RESILIENCE_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, './manifest.json'];
+const SHELL = [OFFLINE_HTML, STYLES, APP_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, './manifest.json'];
+
+const DB_HELPERS_OLD = `  function tx(store, mode = 'readonly') {
+    return db.transaction(store, mode).objectStore(store);
+  }
+
+  function reqP(req) {
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  async function dbGetAll(store) { return reqP(tx(store).getAll()); }
+  async function dbGet(store, key) { return reqP(tx(store).get(key)); }
+  async function dbPut(store, value) { return reqP(tx(store, 'readwrite').put(value)); }
+  async function dbDelete(store, key) { return reqP(tx(store, 'readwrite').delete(key)); }`;
+
+const DB_HELPERS_NEW = `  function reqP(req) {
+    return new Promise((resolve, reject) => {
+      req.onsuccess = () => resolve(req.result);
+      req.onerror = () => reject(req.error);
+    });
+  }
+
+  function isRecoverableDbError(error) {
+    const name = String(error?.name || '');
+    const message = String(error?.message || '');
+    return (
+      name === 'InvalidStateError' && /connection is (closing|closed)|database connection is (closing|closed)/i.test(message)
+    ) || (
+      name === 'UnknownError' && /indexed database server|connection to indexed database server lost/i.test(message)
+    );
+  }
+
+  async function reopenDb() {
+    try { db?.close(); } catch {}
+    db = null;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    db = await openDb();
+    return db;
+  }
+
+  async function dbRequest(store, mode, makeRequest) {
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        if (!db) db = await openDb();
+        const objectStore = db.transaction(store, mode).objectStore(store);
+        return await reqP(makeRequest(objectStore));
+      } catch (error) {
+        if (attempt === 0 && isRecoverableDbError(error)) {
+          await reopenDb();
+          continue;
+        }
+        throw error;
+      }
+    }
+  }
+
+  async function dbGetAll(store) { return dbRequest(store, 'readonly', objectStore => objectStore.getAll()); }
+  async function dbGet(store, key) { return dbRequest(store, 'readonly', objectStore => objectStore.get(key)); }
+  async function dbPut(store, value) { return dbRequest(store, 'readwrite', objectStore => objectStore.put(value)); }
+  async function dbDelete(store, key) { return dbRequest(store, 'readwrite', objectStore => objectStore.delete(key)); }`;
 
 self.addEventListener('install', event => {
   event.waitUntil(caches.open(CACHE).then(cache => cache.addAll(SHELL)));
@@ -33,22 +94,26 @@ self.addEventListener('fetch', event => {
     return;
   }
 
-  // Always run the IndexedDB recovery guard before the app code. This keeps
-  // the existing app source untouched while allowing iOS/WebKit stale DB
-  // connections to recover with a one-time page reload.
+  // iOS/WebKit can close an IndexedDB connection while a Home Screen app is
+  // suspended. Patch only the four DB helper functions so a failed operation
+  // reopens music-pwa-db v1 and retries once in place. No storage is cleared.
   if (url.pathname.endsWith('/app.js')) {
     event.respondWith((async () => {
       const cache = await caches.open(CACHE);
-      const [guardResponse, appResponse] = await Promise.all([
-        cache.match(DB_RESILIENCE_JS),
-        cache.match(APP_JS)
-      ]);
-      if (!guardResponse || !appResponse) return fetch(req);
-      const [guardCode, appCode] = await Promise.all([
-        guardResponse.text(),
-        appResponse.text()
-      ]);
-      return new Response(`${guardCode}\n${appCode}`, {
+      const appResponse = await cache.match(APP_JS);
+      if (!appResponse) return fetch(req);
+      const appCode = await appResponse.text();
+      if (!appCode.includes(DB_HELPERS_OLD)) {
+        console.error('MUSIC DB reconnect patch did not match app.js; serving original source.');
+        return new Response(appCode, {
+          headers: {
+            'Content-Type': 'application/javascript; charset=utf-8',
+            'Cache-Control': 'no-store'
+          }
+        });
+      }
+      const patchedCode = appCode.replace(DB_HELPERS_OLD, DB_HELPERS_NEW);
+      return new Response(patchedCode, {
         headers: {
           'Content-Type': 'application/javascript; charset=utf-8',
           'Cache-Control': 'no-store'
