@@ -9,7 +9,7 @@
   "theme_color": "#0b0b0c",
   "icons": [
     {
-      "src": "/lexi-assets/music-logo.png",
+      "src": "/lexi-assets/music-logo.png?v=2",
       "type": "image/png",
       "purpose": "any"
     }
