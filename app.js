@@ -666,7 +666,9 @@
       if (!preserveQueue) buildQueue(id);
       if (currentObjectUrl) URL.revokeObjectURL(currentObjectUrl);
       const source = await sourceForTrack(track);
-      const parsed = await applyEmbeddedMetadata(track, source.blob, true);
+      const parsed = source.stale && window.MusicMetadata?.parse
+        ? await window.MusicMetadata.parse(source.blob, track.mimeType || '', true)
+        : await applyEmbeddedMetadata(track, source.blob, true);
       const artworkUrl = setCurrentArtwork(parsed);
       currentObjectUrl = source.url;
       currentTrackId = id;
