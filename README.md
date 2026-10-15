@@ -169,6 +169,7 @@ The install preview should show the cat icon before tapping **Add**.
 - Removed custom-playlist `Object.prototype` accessors; app and enhancement module now read/write the custom-playlist localStorage object directly.
 - Made version-2 playlist backup/restore the only complete backup path; the base app now fails closed if the enhancement module is unavailable.
 - Removed obsolete `db-resilience.js` and `settings-ui.js` files.
+- Installed iPhone runtime smoke passed: the existing Home Screen PWA reopened with library/playlists/Favorites intact; downloaded playback worked normally and in Airplane Mode; Offline audio count/size remained consistent; and Export backup opened the iOS share sheet.
 
 ### 2026-10-12
 
