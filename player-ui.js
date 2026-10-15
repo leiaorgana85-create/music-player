@@ -235,11 +235,24 @@
       try {
         if (!db.objectStoreNames.contains('audio')) return { count: 0, bytes: 0 };
         const transaction = db.transaction('audio', 'readonly');
-        const rows = await requestPromise(transaction.objectStore('audio').getAll());
-        return {
-          count: rows.length,
-          bytes: rows.reduce((sum, row) => sum + storedAudioSize(row), 0)
-        };
+        const store = transaction.objectStore('audio');
+        return await new Promise((resolve, reject) => {
+          let count = 0;
+          let bytes = 0;
+          const request = store.openCursor();
+          request.onsuccess = () => {
+            const cursor = request.result;
+            if (!cursor) {
+              resolve({ count, bytes });
+              return;
+            }
+            count += 1;
+            bytes += storedAudioSize(cursor.value);
+            cursor.continue();
+          };
+          request.onerror = () => reject(request.error);
+          transaction.onabort = () => reject(transaction.error || new Error('Storage read was cancelled.'));
+        });
       } finally {
         db.close();
       }
