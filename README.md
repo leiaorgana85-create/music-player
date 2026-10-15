@@ -37,7 +37,7 @@ Lexi Music uses IndexedDB:
 - **`library` store:** saved library metadata/rows
 - **`audio` store:** downloaded offline song audio
 
-Downloaded audio is stored in the `audio` object store keyed by the Google Drive file ID. On WebKit/iOS, the app uses a structured-clone-safe ArrayBuffer wrapper for the stored audio value and reconstructs a Blob for playback.
+Downloaded audio is stored in the `audio` object store keyed by the Google Drive file ID. On WebKit/iOS, the app uses a structured-clone-safe ArrayBuffer wrapper for the stored audio value and reconstructs a Blob only when playback needs an object URL.
 
 The app's **Settings → Storage → Offline audio** value is the authoritative Lexi Music offline-audio measurement. It directly reads every row in the IndexedDB `audio` store and sums the stored audio bytes.
 
@@ -91,10 +91,12 @@ The per-song **Remove from device** command is more destructive than **Remove do
 
 - local library row
 - offline audio
-- playlist memberships
+- built-in and custom playlist memberships
 - Favorite status
 
 It **does not delete the Google Drive file**. If the Drive file still exists, a later Refresh can add the library row back, but the prior playlist/Favorite membership is not automatically restored.
+
+The local `library` + `audio` deletion is committed first. Playlist/Favorite references are cleaned only after that succeeds, so a failed IndexedDB delete does not silently strip playlist membership.
 
 Use **Remove download** when the goal is only to free iPhone storage.
 
@@ -108,12 +110,14 @@ Therefore, deleting a file from Google Drive is not the normal way to remove an 
 
 ## Offline/download behavior
 
-- **Download all** downloads every library track not already in the local `audio` store.
-- **Download view** downloads the current playlist/view.
-- The **Downloaded** tab is based on IDs actually present in the `audio` store.
-- Playback checks IndexedDB first. If audio is present, the app plays the local copy and reports **Playing offline**.
-- If the song is not downloaded and the phone is online, the app fetches it from Google Drive for playback.
-- The service worker caches the app shell from the GitHub Pages origin; it does not cache Google Drive audio responses as offline song storage.
+- A local audio row is treated as a **current download** only when it contains usable bytes and matches the current library file size; when both revision timestamps are available, they must match too.
+- If Drive reports a newer/different revision, the older local audio row is preserved until a verified replacement download succeeds. It is not counted as current in **Downloaded** and will be eligible for re-download.
+- If the phone is offline and only that older saved copy exists, Lexi Music may still play it and labels it **Playing saved older copy**. Its embedded metadata is not written back over the newer library record.
+- **Download all** and **Download view** download tracks that do not have a current validated offline copy.
+- Playback checks IndexedDB first. If the current audio copy is present, the app plays it locally and reports **Playing offline**.
+- If the song is not current offline and the phone is online, the app fetches it from Google Drive for playback/download as appropriate.
+- iOS/WebKit stale/closed IndexedDB connections are handled directly inside `app.js`: the failed database operation reopens `music-pwa-db` version 1 and retries once. No storage is cleared.
+- The service worker caches the app shell from the GitHub Pages origin; it does **not** rewrite `app.js` and does not cache Google Drive audio as offline song storage.
 - The app requests persistent browser storage where supported, but iOS ultimately controls web storage and may evict it under storage pressure.
 
 Before a flight, download the desired songs and test at least one or two tracks in Airplane Mode.
@@ -123,10 +127,13 @@ Before a flight, download the desired songs and test at least one or two tracks 
 The following are stored separately from the offline audio store:
 
 - Settings: `localStorage` key `musicPwaSettings`
-- Playlists: `localStorage` key `musicPwaPlaylists`
+- Built-in playlists: `localStorage` key `musicPwaPlaylists`
+- Custom playlists: `localStorage` key `musicPwaCustomPlaylists`
 - Favorites: `localStorage` key `musicPwaFavorites`
 
-Playlist backup/export does not copy or change downloaded audio.
+Custom playlist names/contents are read directly from their dedicated localStorage object; Lexi Music does not modify `Object.prototype` to expose them.
+
+Playlist backup/restore has one complete version-2 implementation in `playlist-enhancements.js`. It includes built-in playlists, custom playlists, their stored order, and Favorites. Downloaded audio is not copied or changed. If that module is unavailable, the base app fails closed instead of silently creating an incomplete backup.
 
 ## Google authorization
 
@@ -150,7 +157,20 @@ Authorized JavaScript origin:
 
 The install preview should show the cat icon before tapping **Add**.
 
-## Change notes — 2026-10-12
+## Change notes
+
+### 2026-10-14 integrity hardening
+
+- Kept `music-pwa-db` at **version 1**; no database migration, storage reset, or local-data clearing was introduced.
+- Moved IndexedDB reconnect/retry handling into `app.js`; removed service-worker source rewriting.
+- Added current-offline validation using stored bytes, Drive size, and revision timestamp when available; stale copies are preserved until replacement succeeds.
+- Removed the global `Response.prototype.blob` / `URL.createObjectURL` monkey patches; structured audio conversion is now local to the music code path.
+- Made **Remove from device** sequence its IndexedDB delete before playlist/Favorite cleanup and include custom playlists.
+- Removed custom-playlist `Object.prototype` accessors; app and enhancement module now read/write the custom-playlist localStorage object directly.
+- Made version-2 playlist backup/restore the only complete backup path; the base app now fails closed if the enhancement module is unavailable.
+- Removed obsolete `db-resilience.js` and `settings-ui.js` files.
+
+### 2026-10-12
 
 - Added exact in-app offline-audio count/byte reporting and verified bulk deletion in `player-ui.js`.
   - Commit: `a9e7a6c40dca998a6fc7840603b81d5547afedd6`
