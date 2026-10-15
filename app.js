@@ -13,8 +13,8 @@
   const DB_VERSION = 1;
   const SETTINGS_KEY = 'musicPwaSettings';
   const PLAYLISTS_KEY = 'musicPwaPlaylists';
+  const CUSTOM_PLAYLISTS_KEY = 'musicPwaCustomPlaylists';
   const FAVORITES_KEY = 'musicPwaFavorites';
-  const BACKUP_VERSION = 1;
   const bootStart = window.__musicBootStart || performance.now();
   const startupTiming = {
     scriptDelay: performance.now() - bootStart,
@@ -33,6 +33,7 @@
   let library = [];
   let offlineIds = new Set();
   let offlineBytes = 0;
+  let audioRowsById = new Map();
   let playlists = loadPlaylists();
   let favorites = loadFavorites();
   let settings = loadSettings();
@@ -86,6 +87,30 @@
     localStorage.setItem(PLAYLISTS_KEY, JSON.stringify(playlists));
   }
 
+  function loadCustomPlaylists() {
+    try {
+      const saved = JSON.parse(localStorage.getItem(CUSTOM_PLAYLISTS_KEY) || '{}');
+      if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return {};
+      return saved;
+    } catch {
+      return {};
+    }
+  }
+
+  function playlistIds(name) {
+    if (PLAYLIST_NAMES.includes(name)) return Array.isArray(playlists[name]) ? playlists[name] : [];
+    const custom = loadCustomPlaylists();
+    return Array.isArray(custom[name]) ? custom[name] : [];
+  }
+
+  function saveCustomPlaylist(name, ids) {
+    const custom = loadCustomPlaylists();
+    if (!Object.prototype.hasOwnProperty.call(custom, name)) return false;
+    custom[name] = [...new Set((ids || []).filter(id => typeof id === 'string'))];
+    localStorage.setItem(CUSTOM_PLAYLISTS_KEY, JSON.stringify(custom));
+    return true;
+  }
+
   function loadFavorites() {
     try {
       const saved = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
@@ -125,10 +150,6 @@
     });
   }
 
-  function tx(store, mode = 'readonly') {
-    return db.transaction(store, mode).objectStore(store);
-  }
-
   function reqP(req) {
     return new Promise((resolve, reject) => {
       req.onsuccess = () => resolve(req.result);
@@ -136,10 +157,45 @@
     });
   }
 
-  async function dbGetAll(store) { return reqP(tx(store).getAll()); }
-  async function dbGet(store, key) { return reqP(tx(store).get(key)); }
-  async function dbPut(store, value) { return reqP(tx(store, 'readwrite').put(value)); }
-  async function dbDelete(store, key) { return reqP(tx(store, 'readwrite').delete(key)); }
+  function isRecoverableDbError(error) {
+    const name = String(error?.name || '');
+    const message = String(error?.message || '');
+    return (
+      name === 'InvalidStateError' && /connection is (closing|closed)|database connection is (closing|closed)/i.test(message)
+    ) || (
+      name === 'UnknownError' && /indexed database server|connection to indexed database server lost/i.test(message)
+    );
+  }
+
+  async function reopenDb() {
+    try { db?.close(); } catch {}
+    db = null;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    db = await openDb();
+    return db;
+  }
+
+  async function dbRequest(store, mode, makeRequest) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        if (!db) db = await openDb();
+        const objectStore = db.transaction(store, mode).objectStore(store);
+        return await reqP(makeRequest(objectStore));
+      } catch (error) {
+        if (attempt === 0 && isRecoverableDbError(error)) {
+          await reopenDb();
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('IndexedDB request failed.');
+  }
+
+  async function dbGetAll(store) { return dbRequest(store, 'readonly', objectStore => objectStore.getAll()); }
+  async function dbGet(store, key) { return dbRequest(store, 'readonly', objectStore => objectStore.get(key)); }
+  async function dbPut(store, value) { return dbRequest(store, 'readwrite', objectStore => objectStore.put(value)); }
+  async function dbDelete(store, key) { return dbRequest(store, 'readwrite', objectStore => objectStore.delete(key)); }
 
   function cleanTitle(name) {
     return name.replace(/\.(mp3|m4a|aac|flac|wav)$/i, '');
@@ -160,6 +216,30 @@
     if (ArrayBuffer.isView(value)) return value.byteLength;
     if (typeof Blob !== 'undefined' && value instanceof Blob) return value.size;
     return 0;
+  }
+
+  function audioRowIsCurrent(track, row) {
+    if (!track || !row?.blob) return false;
+    const actualSize = audioValueSize(row.blob);
+    if (actualSize <= 0) return false;
+    const expectedSize = Number(track.size || 0);
+    if (expectedSize > 0 && actualSize !== expectedSize) return false;
+    const trackModified = String(track.modifiedTime || '');
+    const rowModified = String(row.modifiedTime || '');
+    if (trackModified && rowModified && trackModified !== rowModified) return false;
+    return true;
+  }
+
+  async function responseToAudioValue(response) {
+    const type = response.headers.get('content-type') || 'application/octet-stream';
+    return { __musicBytes: await response.arrayBuffer(), type };
+  }
+
+  function audioObjectUrl(value) {
+    if (value?.__musicBytes instanceof ArrayBuffer) {
+      return URL.createObjectURL(new Blob([value.__musicBytes], { type: value.type || 'application/octet-stream' }));
+    }
+    return URL.createObjectURL(value);
   }
 
   function displayTitle(track) {
@@ -210,8 +290,11 @@
 
     mark = performance.now();
     const audioRows = await dbGetAll('audio');
-    offlineIds = new Set(audioRows.map(x => x.id));
-    offlineBytes = audioRows.reduce((sum, row) => sum + audioValueSize(row.blob), 0);
+    audioRowsById = new Map(audioRows.map(row => [row.id, row]));
+    const libraryById = new Map(library.map(track => [track.id, track]));
+    const currentRows = audioRows.filter(row => audioRowIsCurrent(libraryById.get(row.id), row));
+    offlineIds = new Set(currentRows.map(row => row.id));
+    offlineBytes = currentRows.reduce((sum, row) => sum + audioValueSize(row.blob), 0);
     if (timing) timing.audioRead = performance.now() - mark;
 
     mark = performance.now();
@@ -386,11 +469,18 @@
     if (!navigator.onLine) throw new Error('Connect to the internet to download songs.');
     if (!quiet) showProgress(`Downloading ${displayTitle(track)}…`);
     const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(track.id)}?alt=media`;
-    const blob = await (await driveFetch(url)).blob();
-    await dbPut('audio', { id: track.id, blob, modifiedTime: track.modifiedTime || null });
+    const response = await driveFetch(url);
+    const audioValue = await responseToAudioValue(response);
+    const actualSize = audioValueSize(audioValue);
+    const expectedSize = Number(track.size || 0);
+    if (actualSize <= 0 || (expectedSize > 0 && actualSize !== expectedSize)) {
+      throw new Error(`Download verification failed for ${displayTitle(track)}. The existing offline copy was kept.`);
+    }
+    await dbPut('audio', { id: track.id, blob: audioValue, modifiedTime: track.modifiedTime || null });
+    audioRowsById.set(track.id, { id: track.id, blob: audioValue, modifiedTime: track.modifiedTime || null });
     offlineIds.add(track.id);
-    offlineBytes += audioValueSize(blob);
-    await applyEmbeddedMetadata(track, blob, false);
+    offlineBytes += actualSize;
+    await applyEmbeddedMetadata(track, audioValue, false);
     render();
     if (!quiet) {
       showProgress(`${displayTitle(track)} is available offline.`);
@@ -441,7 +531,7 @@
     if (currentView === 'ALL') rows = [...library];
     else if (currentView === 'DOWNLOADED') rows = library.filter(t => offlineIds.has(t.id));
     else if (currentView === 'FAVORITES') rows = favorites.map(id => library.find(t => t.id === id)).filter(Boolean);
-    else rows = (playlists[currentView] || []).map(id => library.find(t => t.id === id)).filter(Boolean);
+    else rows = playlistIds(currentView).map(id => library.find(t => t.id === id)).filter(Boolean);
 
     const q = (els.searchInput?.value || '').trim().toLowerCase();
     if (q) {
@@ -542,13 +632,18 @@
 
   async function sourceForTrack(track) {
     const cached = await dbGet('audio', track.id);
-    if (cached?.blob) return { url: URL.createObjectURL(cached.blob), offline: true, blob: cached.blob };
+    if (audioRowIsCurrent(track, cached)) {
+      return { url: audioObjectUrl(cached.blob), offline: true, stale: false, blob: cached.blob };
+    }
+    if (cached?.blob && !navigator.onLine) {
+      return { url: audioObjectUrl(cached.blob), offline: true, stale: true, blob: cached.blob };
+    }
     if (!navigator.onLine) throw new Error('This song is not downloaded. Connect to the internet or download it before the flight.');
     showProgress(`Loading ${displayTitle(track)} from Drive…`);
     const url = `https://www.googleapis.com/drive/v3/files/${encodeURIComponent(track.id)}?alt=media`;
-    const blob = await (await driveFetch(url)).blob();
+    const audioValue = await responseToAudioValue(await driveFetch(url));
     showProgress('');
-    return { url: URL.createObjectURL(blob), offline: false, blob };
+    return { url: audioObjectUrl(audioValue), offline: false, stale: false, blob: audioValue };
   }
 
   function setCurrentArtwork(parsed) {
@@ -579,7 +674,7 @@
       els.nowTitle.textContent = displayTitle(track);
       els.nowMeta.textContent = [displayArtist(track), displayAlbum(track)].filter(Boolean).join(' • ');
       els.nowMeta.classList.toggle('hidden', !els.nowMeta.textContent);
-      els.nowStatus.textContent = source.offline ? 'Playing offline' : 'Playing from Drive';
+      els.nowStatus.textContent = source.stale ? 'Playing saved older copy' : source.offline ? 'Playing offline' : 'Playing from Drive';
       els.player.classList.remove('hidden');
       updatePlayerFavoriteButton();
       updateMediaSession(track, artworkUrl, parsed?.artwork?.mime || 'image/jpeg');
@@ -653,6 +748,7 @@
 
     if (dialogMode === 'add') {
       for (const name of checked) {
+        if (!PLAYLIST_NAMES.includes(name)) continue;
         const set = new Set(playlists[name]);
         dialogTrackIds.forEach(id => set.add(id));
         playlists[name] = [...set];
@@ -677,9 +773,12 @@
     if (currentView === 'FAVORITES') {
       favorites = favorites.filter(id => !selectedIds.has(id));
       saveFavorites();
-    } else {
+    } else if (PLAYLIST_NAMES.includes(currentView)) {
       playlists[currentView] = playlists[currentView].filter(id => !selectedIds.has(id));
       savePlaylists();
+    } else {
+      const remaining = playlistIds(currentView).filter(id => !selectedIds.has(id));
+      saveCustomPlaylist(currentView, remaining);
     }
     setSelectionMode(false);
   }
@@ -767,64 +866,9 @@
     updateTimes();
   }
 
-  async function exportBackup() {
-    const payload = {
-      app: 'Lexi Music',
-      version: BACKUP_VERSION,
-      exportedAt: new Date().toISOString(),
-      playlists,
-      favorites
-    };
-    const filename = `lexi-music-playlists-${new Date().toISOString().slice(0, 10)}.json`;
-    const text = JSON.stringify(payload, null, 2);
-    const file = new File([text], filename, { type: 'application/json' });
-
-    try {
-      if (navigator.canShare?.({ files: [file] })) {
-        await navigator.share({ files: [file], title: 'Lexi Music playlist backup' });
-        return;
-      }
-    } catch (error) {
-      if (error?.name === 'AbortError') return;
-    }
-
-    const url = URL.createObjectURL(file);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = filename;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-  }
-
-  async function importBackup(file) {
-    if (!file) return;
-    try {
-      const parsed = JSON.parse(await file.text());
-      if (!parsed || typeof parsed !== 'object' || !parsed.playlists) throw new Error('This is not a Lexi Music playlist backup.');
-      const importedPlaylists = {};
-      for (const name of PLAYLIST_NAMES) {
-        const ids = parsed.playlists[name];
-        importedPlaylists[name] = Array.isArray(ids) ? [...new Set(ids.filter(id => typeof id === 'string'))] : [];
-      }
-      const importedFavorites = Array.isArray(parsed.favorites)
-        ? [...new Set(parsed.favorites.filter(id => typeof id === 'string'))]
-        : [];
-      if (!confirm('Replace the current playlists and Favorites with this backup? Downloaded songs will not be changed.')) return;
-      playlists = importedPlaylists;
-      favorites = importedFavorites;
-      savePlaylists();
-      saveFavorites();
-      setSelectionMode(false);
-      render();
-      showProgress('Playlist backup restored. Downloaded songs were not changed.');
-      setTimeout(() => showProgress(''), 2500);
-    } catch (error) {
-      alert(error.message || 'Could not import this playlist backup.');
-    } finally {
-      els.backupFileInput.value = '';
-    }
+  function backupModuleUnavailable(event) {
+    event?.preventDefault?.();
+    alert('Playlist backup is temporarily unavailable. Reload Lexi Music and try again.');
   }
 
   function bindEvents() {
@@ -843,9 +887,11 @@
       setStatus('Drive setup saved', 'Tap Connect Drive to authorize access.');
     });
 
-    els.exportBackupBtn.addEventListener('click', exportBackup);
-    els.importBackupBtn.addEventListener('click', () => els.backupFileInput.click());
-    els.backupFileInput.addEventListener('change', () => importBackup(els.backupFileInput.files?.[0]));
+    // playlist-enhancements.js owns the complete version-2 backup/restore path.
+    // These bubble-phase handlers are a fail-closed fallback only; the module's
+    // capture-phase handlers stop propagation when it is loaded normally.
+    els.exportBackupBtn.addEventListener('click', backupModuleUnavailable);
+    els.importBackupBtn.addEventListener('click', backupModuleUnavailable);
 
     els.connectBtn.addEventListener('click', async () => {
       try {
