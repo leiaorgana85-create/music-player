@@ -192,10 +192,46 @@
     throw new Error('IndexedDB request failed.');
   }
 
-  async function dbGetAll(store) { return dbRequest(store, 'readonly', objectStore => objectStore.getAll()); }
-  async function dbGet(store, key) { return dbRequest(store, 'readonly', objectStore => objectStore.get(key)); }
-  async function dbPut(store, value) { return dbRequest(store, 'readwrite', objectStore => objectStore.put(value)); }
-  async function dbDelete(store, key) { return dbRequest(store, 'readwrite', objectStore => objectStore.delete(key)); }
+  function audioStorage() {
+    if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
+    return window.LexiAudioStorage;
+  }
+
+  async function dbGetAll(store) {
+    if (store === 'audio') {
+      const storage = audioStorage();
+      await storage.ready;
+      return storage.getAll();
+    }
+    return dbRequest(store, 'readonly', objectStore => objectStore.getAll());
+  }
+
+  async function dbGet(store, key) {
+    if (store === 'audio') {
+      const storage = audioStorage();
+      await storage.ready;
+      return storage.get(key);
+    }
+    return dbRequest(store, 'readonly', objectStore => objectStore.get(key));
+  }
+
+  async function dbPut(store, value) {
+    if (store === 'audio') {
+      const storage = audioStorage();
+      await storage.ready;
+      return storage.put(value);
+    }
+    return dbRequest(store, 'readwrite', objectStore => objectStore.put(value));
+  }
+
+  async function dbDelete(store, key) {
+    if (store === 'audio') {
+      const storage = audioStorage();
+      await storage.ready;
+      return storage.deleteKey(key);
+    }
+    return dbRequest(store, 'readwrite', objectStore => objectStore.delete(key));
+  }
 
   function cleanTitle(name) {
     return name.replace(/\.(mp3|m4a|aac|flac|wav)$/i, '');
