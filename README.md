@@ -144,6 +144,7 @@ Permanent song removal remains: delete the Drive master and remove the local app
 - `audio-storage.js` has its own stale/closed IndexedDB reconnect-and-retry path for the dedicated audio database.
 - `app.js` retains reconnect/retry handling for `music-pwa-db` library operations.
 - The service worker caches the app shell, including `audio-storage.js`; it does not cache Google Drive audio as offline song storage.
+- The Music service worker may delete only cache names beginning with `music-shell-`; it must never delete Spend/Notes/Parents caches on the shared GitHub Pages origin.
 - The app requests persistent browser storage where supported, but iOS ultimately controls web-storage eviction and physical allocation.
 
 Before a flight, download the desired songs and test at least one or two tracks in Airplane Mode.
@@ -190,7 +191,7 @@ Authorized JavaScript origin:
 - Added **Reset Lexi Music on this device** for an intentional true clean start. `reset.html` deletes both Lexi Music IndexedDB databases, Music-only localStorage/sessionStorage keys, `music-shell-*` caches and the `/music-player/` service worker, while leaving Google Drive and the other Lexi apps untouched.
 - Settings labels the broad diagnostic number **WebKit storage estimate** and explains that it may include allocated-but-unused space.
 - **Remove from device** deletes dedicated audio first and then the library row.
-- Service-worker shell v40 caches `audio-storage.js?v=2`, `app.js?v=18`, and `player-ui.js?v=9`.
+- Service-worker shell v41 caches `audio-storage.js?v=2`, `app.js?v=18`, and `player-ui.js?v=9`. The v41 activation cleanup is namespace-scoped to `music-shell-*` caches so Music cannot erase neighboring Lexi app caches on the shared origin.
 - Repository/source verification is required before calling the change complete; installed-iPhone runtime smoke must separately confirm the reset's before→after WebKit storage number and the fresh Drive refresh/download flow.
 
 ### 2026-10-14 — integrity hardening
