@@ -334,9 +334,10 @@
   </script>
   <script src="metadata.js?v=1" defer></script>
   <script>
+    const audioStorageReady = window.LexiAudioStorage?.ready || Promise.reject(new Error('Offline audio storage module did not load.'));
     Promise.all([
       Promise.resolve(window.__musicSwUpdate),
-      Promise.resolve(window.LexiAudioStorage?.ready)
+      audioStorageReady
     ]).then(() => {
       const script = document.createElement('script');
       script.src = './app.js?v=17';
