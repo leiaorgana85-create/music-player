@@ -1,4 +1,5 @@
-const CACHE = 'music-shell-v40';
+const CACHE_PREFIX = 'music-shell-';
+const CACHE = 'music-shell-v41';
 const OFFLINE_HTML = './index.html?v=26';
 const APP_JS = './app.js?v=18';
 const AUDIO_STORAGE_JS = './audio-storage.js?v=2';
@@ -16,7 +17,11 @@ self.addEventListener('install', event => {
 self.addEventListener('activate', event => {
   event.waitUntil((async () => {
     const keys = await caches.keys();
-    await Promise.all(keys.filter(key => key !== CACHE).map(key => caches.delete(key)));
+    await Promise.all(
+      keys
+        .filter(key => key.startsWith(CACHE_PREFIX) && key !== CACHE)
+        .map(key => caches.delete(key))
+    );
     await self.clients.claim();
   })());
 });
