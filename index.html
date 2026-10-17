@@ -337,11 +337,17 @@
     Promise.all([
       Promise.resolve(window.__musicSwUpdate),
       Promise.resolve(window.LexiAudioStorage?.ready)
-    ]).finally(() => {
+    ]).then(() => {
       const script = document.createElement('script');
       script.src = './app.js?v=17';
       script.defer = true;
       document.head.appendChild(script);
+    }).catch(error => {
+      console.error(error);
+      const title = document.getElementById('connectionLabel');
+      const detail = document.getElementById('statusDetail');
+      if (title) title.textContent = 'Could not start app';
+      if (detail) detail.textContent = 'Offline audio storage could not initialize. Reload Lexi Music.';
     });
   </script>
   <script src="player-ui.js?v=8" defer></script>
