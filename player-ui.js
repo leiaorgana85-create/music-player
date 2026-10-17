@@ -102,6 +102,7 @@
       }
       #settingsDialog.settings-clean .settings-storage-actions { margin-top: 10px; }
       #settingsDialog.settings-clean .settings-storage-actions .button { width: 100%; }
+      #settingsDialog.settings-clean .settings-storage-actions .button + .button { margin-top: 8px; }
       #settingsDialog.settings-clean .settings-storage-result {
         min-height: 16px; margin: 8px 0 0; font-size: 12px; line-height: 1.4;
       }
@@ -151,8 +152,9 @@
       <p class="help settings-note">Offline audio is exact. WebKit storage is only an origin/container estimate and can include allocated-but-unused database space or app cache.</p>
       <div class="settings-storage-actions">
         <button id="settingsClearOfflineBtn" type="button" class="button secondary">Delete all offline audio</button>
+        <button id="settingsFactoryResetBtn" type="button" class="button secondary">Reset Lexi Music on this device</button>
       </div>
-      <p class="help settings-note">Bulk delete destroys the dedicated audio database and recreates a fresh empty one. Google Drive files and the local library list are kept.</p>
+      <p class="help settings-note">Delete all offline audio keeps your local library and playlists. Reset deletes all Lexi Music data on this device—including the old library database, playlists, Favorites, settings and Music app cache—and starts fresh. Google Drive is never deleted.</p>
       <p id="settingsStorageResult" class="settings-storage-result"></p>
     `;
 
@@ -245,6 +247,7 @@
     }
 
     const clearOfflineButton = document.getElementById('settingsClearOfflineBtn');
+    const factoryResetButton = document.getElementById('settingsFactoryResetBtn');
     const storageResult = document.getElementById('settingsStorageResult');
 
     clearOfflineButton?.addEventListener('click', async () => {
@@ -282,6 +285,18 @@
       }
     });
 
+    factoryResetButton?.addEventListener('click', () => {
+      const confirmed = confirm(
+        'Start Lexi Music brand new on this device?\n\n' +
+        'This deletes ALL Lexi Music data stored on this device: the old library database, offline audio, playlists, Favorites, local settings and Music app cache.\n\n' +
+        'Your Google Drive MUSIC files are NOT deleted.'
+      );
+      if (!confirmed) return;
+      factoryResetButton.disabled = true;
+      if (storageResult) storageResult.textContent = 'Opening full local reset…';
+      location.href = './reset.html';
+    });
+
     const verifiedAfterReload = sessionStorage.getItem('musicStorageClearVerified') === '1';
     if (verifiedAfterReload) {
       sessionStorage.removeItem('musicStorageClearVerified');
@@ -291,6 +306,17 @@
       setTimeout(() => {
         const settingsButton = document.getElementById('settingsBtn');
         if (!dialog.open && settingsButton) settingsButton.click();
+      }, 50);
+    }
+
+    const factoryResetVerified = sessionStorage.getItem('musicFactoryResetVerified');
+    if (factoryResetVerified) {
+      sessionStorage.removeItem('musicFactoryResetVerified');
+      if (storageResult) storageResult.textContent = factoryResetVerified;
+      setTimeout(() => {
+        const settingsButton = document.getElementById('settingsBtn');
+        if (!dialog.open && settingsButton) settingsButton.click();
+        setTimeout(refreshSettingsStatus, 100);
       }, 50);
     }
 
