@@ -146,13 +146,13 @@
     storageSection.innerHTML = `
       <div class="settings-section-title">Storage</div>
       <div class="settings-row"><span class="settings-row-label">Offline audio</span><span id="settingsAudioStorage" class="settings-row-value">Calculating…</span></div>
-      <div class="settings-storage-path">Exact local audio stored in IndexedDB: <strong>music-pwa-db → audio</strong></div>
-      <div class="settings-row"><span class="settings-row-label">Site storage estimate</span><span id="settingsTotalStorage" class="settings-row-value">Calculating…</span></div>
-      <p class="help settings-note">The offline-audio number above is exact. The site-storage number is only an iOS/WebKit estimate and may include other pages on leiaorgana85-create.github.io.</p>
+      <div class="settings-storage-path">Exact local audio: <strong>music-pwa-audio-db → audio</strong></div>
+      <div class="settings-row"><span class="settings-row-label">WebKit storage estimate</span><span id="settingsTotalStorage" class="settings-row-value">Calculating…</span></div>
+      <p class="help settings-note">Offline audio is exact. WebKit storage is only an origin/container estimate and can include allocated-but-unused database space or app cache.</p>
       <div class="settings-storage-actions">
         <button id="settingsClearOfflineBtn" type="button" class="button secondary">Delete all offline audio</button>
       </div>
-      <p class="help settings-note">Use this before removing or reinstalling the Home Screen app. Google Drive files, the local library list, playlists, and Favorites are kept.</p>
+      <p class="help settings-note">Bulk delete destroys the dedicated audio database and recreates a fresh empty one. Google Drive files and the local library list are kept.</p>
       <p id="settingsStorageResult" class="settings-storage-result"></p>
     `;
 
@@ -197,79 +197,16 @@
       return `${Math.round(n / 1024)} KB`;
     }
 
-    function storedAudioSize(row) {
-      const value = row?.blob ?? row;
-      if (!value) return 0;
-      if (value.__musicBytes instanceof ArrayBuffer) return value.__musicBytes.byteLength;
-      if (value instanceof ArrayBuffer) return value.byteLength;
-      if (ArrayBuffer.isView(value)) return value.byteLength;
-      if (typeof Blob !== 'undefined' && value instanceof Blob) return value.size;
-      return 0;
-    }
-
-    function openMusicDb() {
-      return new Promise((resolve, reject) => {
-        const request = indexedDB.open('music-pwa-db', 1);
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    }
-
-    function requestPromise(request) {
-      return new Promise((resolve, reject) => {
-        request.onsuccess = () => resolve(request.result);
-        request.onerror = () => reject(request.error);
-      });
-    }
-
-    function finishTransaction(transaction) {
-      return new Promise((resolve, reject) => {
-        transaction.oncomplete = resolve;
-        transaction.onerror = () => reject(transaction.error);
-        transaction.onabort = () => reject(transaction.error || new Error('Storage operation was cancelled.'));
-      });
-    }
-
     async function readOfflineAudioStorage() {
-      const db = await openMusicDb();
-      try {
-        if (!db.objectStoreNames.contains('audio')) return { count: 0, bytes: 0 };
-        const transaction = db.transaction('audio', 'readonly');
-        const store = transaction.objectStore('audio');
-        return await new Promise((resolve, reject) => {
-          let count = 0;
-          let bytes = 0;
-          const request = store.openCursor();
-          request.onsuccess = () => {
-            const cursor = request.result;
-            if (!cursor) {
-              resolve({ count, bytes });
-              return;
-            }
-            count += 1;
-            bytes += storedAudioSize(cursor.value);
-            cursor.continue();
-          };
-          request.onerror = () => reject(request.error);
-          transaction.onabort = () => reject(transaction.error || new Error('Storage read was cancelled.'));
-        });
-      } finally {
-        db.close();
-      }
+      if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
+      await window.LexiAudioStorage.ready;
+      return window.LexiAudioStorage.readStats();
     }
 
     async function clearOfflineAudioStorage() {
-      const db = await openMusicDb();
-      try {
-        if (db.objectStoreNames.contains('audio')) {
-          const transaction = db.transaction('audio', 'readwrite');
-          transaction.objectStore('audio').clear();
-          await finishTransaction(transaction);
-        }
-      } finally {
-        db.close();
-      }
-      return readOfflineAudioStorage();
+      if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
+      await window.LexiAudioStorage.ready;
+      return window.LexiAudioStorage.deleteDatabase();
     }
 
     async function refreshSettingsStatus() {
@@ -324,11 +261,11 @@
 
         const confirmed = confirm(
           `Delete all ${before.count} offline song${before.count === 1 ? '' : 's'} (${formatBytes(before.bytes)}) from this device?\n\n` +
-          'This deletes only the downloaded audio in Lexi Music. Google Drive files, the local library list, playlists, and Favorites are kept.'
+          'This deletes only the downloaded audio in Lexi Music. Google Drive files and the local library list are kept.'
         );
         if (!confirmed) return;
 
-        if (storageResult) storageResult.textContent = 'Deleting offline audio…';
+        if (storageResult) storageResult.textContent = 'Deleting offline audio database…';
         const after = await clearOfflineAudioStorage();
         if (after.count !== 0 || after.bytes !== 0) {
           throw new Error(`Verification failed: ${after.count} audio row(s) remain.`);
@@ -339,7 +276,7 @@
       } catch (error) {
         console.error(error);
         if (storageResult) storageResult.textContent = 'Could not verify a complete delete. No success was recorded.';
-        alert('Could not fully clear and verify offline audio. Please try again.');
+        alert('Could not fully delete and verify offline audio. Please try again.');
       } finally {
         clearOfflineButton.disabled = false;
       }
@@ -349,7 +286,7 @@
     if (verifiedAfterReload) {
       sessionStorage.removeItem('musicStorageClearVerified');
       if (storageResult) {
-        storageResult.textContent = 'Verified: 0 songs · 0 MB offline. Safe to remove or reinstall the Home Screen app if needed.';
+        storageResult.textContent = 'Verified: 0 songs · 0 MB offline. Dedicated audio database was reset.';
       }
       setTimeout(() => {
         const settingsButton = document.getElementById('settingsBtn');
