@@ -4,9 +4,17 @@
   const AUDIO_DB_NAME = 'music-pwa-audio-db';
   const AUDIO_DB_VERSION = 1;
   const AUDIO_STORE = 'audio';
-  const LEGACY_DB_NAME = 'music-pwa-db';
-  const nativeTransaction = IDBDatabase.prototype.transaction;
   let audioDb = null;
+
+  function isRecoverableDbError(error) {
+    const name = String(error?.name || '');
+    const message = String(error?.message || '');
+    return (
+      name === 'InvalidStateError' && /connection is (closing|closed)|database connection is (closing|closed)|not ready/i.test(message)
+    ) || (
+      name === 'UnknownError' && /indexed database server|connection to indexed database server lost/i.test(message)
+    );
+  }
 
   function openAudioDb() {
     if (audioDb) return Promise.resolve(audioDb);
@@ -31,26 +39,48 @@
     });
   }
 
-  const ready = openAudioDb();
+  async function reopenAudioDb() {
+    try { audioDb?.close(); } catch {}
+    audioDb = null;
+    await new Promise(resolve => setTimeout(resolve, 0));
+    return openAudioDb();
+  }
 
-  // Compatibility bridge: existing Lexi Music code still asks music-pwa-db for
-  // a single "audio" transaction. Route only that exact case to the separate
-  // disposable audio database. Library and every other transaction stay on the
-  // original music-pwa-db unchanged. Never fall back to the legacy audio store.
-  IDBDatabase.prototype.transaction = function(storeNames, mode, options) {
-    const names = typeof storeNames === 'string' ? [storeNames] : Array.from(storeNames || []);
-    if (this.name === LEGACY_DB_NAME && names.length === 1 && names[0] === AUDIO_STORE) {
-      if (!audioDb) throw new DOMException('Dedicated offline audio storage is not ready.', 'InvalidStateError');
-      return nativeTransaction.call(audioDb, AUDIO_STORE, mode, options);
-    }
-    return nativeTransaction.call(this, storeNames, mode, options);
-  };
+  const ready = openAudioDb();
 
   function requestPromise(request) {
     return new Promise((resolve, reject) => {
       request.onsuccess = () => resolve(request.result);
       request.onerror = () => reject(request.error || new Error('Offline audio storage request failed.'));
     });
+  }
+
+  function finishTransaction(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.oncomplete = resolve;
+      transaction.onerror = () => reject(transaction.error || new Error('Offline audio storage transaction failed.'));
+      transaction.onabort = () => reject(transaction.error || new Error('Offline audio storage transaction was cancelled.'));
+    });
+  }
+
+  async function runRequest(mode, makeRequest) {
+    for (let attempt = 0; attempt < 2; attempt += 1) {
+      try {
+        const db = await openAudioDb();
+        const transaction = db.transaction(AUDIO_STORE, mode);
+        const request = makeRequest(transaction.objectStore(AUDIO_STORE));
+        const result = await requestPromise(request);
+        if (mode === 'readwrite') await finishTransaction(transaction);
+        return result;
+      } catch (error) {
+        if (attempt === 0 && isRecoverableDbError(error)) {
+          await reopenAudioDb();
+          continue;
+        }
+        throw error;
+      }
+    }
+    throw new Error('Offline audio storage request failed.');
   }
 
   function storedAudioSize(row) {
@@ -63,38 +93,28 @@
     return 0;
   }
 
-  async function readStats() {
-    const db = await openAudioDb();
-    const transaction = nativeTransaction.call(db, AUDIO_STORE, 'readonly');
-    const store = transaction.objectStore(AUDIO_STORE);
-    return new Promise((resolve, reject) => {
-      let count = 0;
-      let bytes = 0;
-      const request = store.openCursor();
-      request.onsuccess = () => {
-        const cursor = request.result;
-        if (!cursor) {
-          resolve({ count, bytes });
-          return;
-        }
-        count += 1;
-        bytes += storedAudioSize(cursor.value);
-        cursor.continue();
-      };
-      request.onerror = () => reject(request.error || new Error('Could not read offline audio storage.'));
-      transaction.onabort = () => reject(transaction.error || new Error('Offline audio storage read was cancelled.'));
-    });
+  async function getAll() {
+    return runRequest('readonly', store => store.getAll());
+  }
+
+  async function get(key) {
+    return runRequest('readonly', store => store.get(key));
+  }
+
+  async function put(value) {
+    return runRequest('readwrite', store => store.put(value));
   }
 
   async function deleteKey(id) {
-    const db = await openAudioDb();
-    const transaction = nativeTransaction.call(db, AUDIO_STORE, 'readwrite');
-    await requestPromise(transaction.objectStore(AUDIO_STORE).delete(id));
-    await new Promise((resolve, reject) => {
-      transaction.oncomplete = resolve;
-      transaction.onerror = () => reject(transaction.error || new Error('Could not remove offline audio.'));
-      transaction.onabort = () => reject(transaction.error || new Error('Offline audio removal was cancelled.'));
-    });
+    return runRequest('readwrite', store => store.delete(id));
+  }
+
+  async function readStats() {
+    const rows = await getAll();
+    return {
+      count: rows.length,
+      bytes: rows.reduce((sum, row) => sum + storedAudioSize(row), 0)
+    };
   }
 
   async function deleteDatabase() {
@@ -118,8 +138,11 @@
     databaseName: AUDIO_DB_NAME,
     storeName: AUDIO_STORE,
     ready,
-    readStats,
+    getAll,
+    get,
+    put,
     deleteKey,
+    readStats,
     deleteDatabase
   };
 })();
