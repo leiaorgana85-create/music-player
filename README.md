@@ -35,7 +35,7 @@ Google Drive `MUSIC` is the master song source. Device-local data is split delib
 - **Owner:** local library metadata/rows
 - Existing installs may still contain the historical `audio` object store in this database schema, but Lexi Music no longer reads or writes offline audio there.
 
-Keeping `music-pwa-db` at version 1 avoids a destructive database migration and preserves the existing library.
+Keeping `music-pwa-db` at version 1 avoids a destructive database migration and preserves the existing library during normal updates.
 
 ### Offline-audio database
 
@@ -91,6 +91,28 @@ Bulk deletion keeps:
 
 The **WebKit storage estimate may still include storage retained from the historical shared database or other WebKit allocation**; only Offline audio is the exact live downloaded-audio measurement.
 
+### Start completely brand new on this device
+
+Use **⚙︎ Settings → Storage → Reset Lexi Music on this device** only when the owner intentionally wants to wipe all Lexi Music state from that installed web-app container and rebuild from Google Drive.
+
+The reset opens `reset.html` after leaving the running player page so its IndexedDB connections are closed, then deletes only Lexi Music-owned data:
+
+- `music-pwa-audio-db`
+- the entire historical `music-pwa-db`, including the old shared audio allocation and local library rows
+- `musicPwaSettings`
+- `musicPwaPlaylists`
+- `musicPwaCustomPlaylists`
+- `musicPwaFavorites`
+- session keys beginning with `music`
+- Cache Storage entries whose names begin with `music-shell-`
+- the service-worker registration scoped to `/music-player/`
+
+It deliberately does **not** clear origin-wide localStorage, all Cache Storage, or other GitHub Pages service workers because Spend, Travel and Notes share the same `leiaorgana85-create.github.io` origin. Google Drive files are never deleted.
+
+The reset records WebKit storage usage before and after the targeted deletion and then returns to a fresh Lexi Music app. On the fresh load, default OAuth/folder configuration is recreated by source, the local library is empty, playlists/Favorites are empty, and the owner can connect/refresh Drive and download again.
+
+If WebKit still reports a large residual after both Lexi Music databases and Music caches are successfully deleted, treat that as a separate WebKit container-level retention problem; do not assume live Lexi Music rows remain.
+
 ## Important distinction: “Remove from device”
 
 The per-song **Remove from device** command is more destructive than **Remove download**. It deletes that song's:
@@ -99,7 +121,7 @@ The per-song **Remove from device** command is more destructive than **Remove do
 - local library row second
 - playlist memberships and Favorite status afterward
 
-It does **not** delete the Google Drive file. If the Drive file still exists, a later Refresh can add the library row back, but removed playlist/Favorite membership is not automatically restored.
+It **does not delete the Google Drive file**. If the Drive file still exists, a later Refresh can add the library row back, but removed playlist/Favorite membership is not automatically restored.
 
 The audio and library rows live in separate IndexedDB databases, so they cannot be one cross-database atomic transaction. The sequence deliberately deletes the audio row first and cleans collections only after the local song removal succeeds.
 
@@ -128,7 +150,7 @@ Before a flight, download the desired songs and test at least one or two tracks 
 
 ## Other local data
 
-The following remain in localStorage:
+The following remain in localStorage during normal use:
 
 - Settings: `musicPwaSettings`
 - Built-in playlists: `musicPwaPlaylists`
@@ -159,16 +181,17 @@ Authorized JavaScript origin:
 
 ## Change notes
 
-### 2026-10-17 — dedicated offline-audio database
+### 2026-10-17 — dedicated offline-audio database + full local reset
 
 - Added `audio-storage.js` and dedicated `music-pwa-audio-db` version 1.
-- `app.js` now explicitly routes all audio reads/writes/deletes to the dedicated database; the main `music-pwa-db` remains the library database.
+- `app.js` explicitly routes all audio reads/writes/deletes to the dedicated database; the main `music-pwa-db` remains the normal library database.
 - No new audio can silently fall back into the historical `music-pwa-db → audio` store.
-- **Delete all offline audio** now deletes the entire dedicated audio database and recreates/reads an empty database for verification.
-- Settings renamed the broad diagnostic number to **WebKit storage estimate** and explains that it may include allocated-but-unused space.
+- **Delete all offline audio** deletes the entire dedicated audio database and recreates/reads an empty database for verification.
+- Added **Reset Lexi Music on this device** for an intentional true clean start. `reset.html` deletes both Lexi Music IndexedDB databases, Music-only localStorage/sessionStorage keys, `music-shell-*` caches and the `/music-player/` service worker, while leaving Google Drive and the other Lexi apps untouched.
+- Settings labels the broad diagnostic number **WebKit storage estimate** and explains that it may include allocated-but-unused space.
 - **Remove from device** deletes dedicated audio first and then the library row.
-- Service-worker shell v39 caches `audio-storage.js?v=2`, `app.js?v=18`, and `player-ui.js?v=8`.
-- Repository/source verification is required before calling the change complete; installed-iPhone runtime smoke must separately confirm download, Airplane Mode playback, and whole-database deletion behavior.
+- Service-worker shell v40 caches `audio-storage.js?v=2`, `app.js?v=18`, and `player-ui.js?v=9`.
+- Repository/source verification is required before calling the change complete; installed-iPhone runtime smoke must separately confirm the reset's before→after WebKit storage number and the fresh Drive refresh/download flow.
 
 ### 2026-10-14 — integrity hardening
 
