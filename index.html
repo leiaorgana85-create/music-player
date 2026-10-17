@@ -11,6 +11,7 @@
   <link rel="apple-touch-icon" href="/lexi-assets/music-logo.png?v=2" />
   <link rel="stylesheet" href="styles.css?v=18" />
   <title>MUSIC</title>
+  <script src="./audio-storage.js?v=1"></script>
   <script>
     window.__musicBootStart = performance.now();
     window.__musicSwUpdate = (async () => {
@@ -276,12 +277,16 @@
         removeBtn.disabled = true;
         let localSongRemoved = false;
         try {
+          if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
+          await window.LexiAudioStorage.ready;
+          await window.LexiAudioStorage.deleteKey(activeTrackId);
+
           const db = await openDb();
-          const transaction = db.transaction(['library', 'audio'], 'readwrite');
+          const transaction = db.transaction('library', 'readwrite');
           transaction.objectStore('library').delete(activeTrackId);
-          transaction.objectStore('audio').delete(activeTrackId);
           await finishTransaction(transaction);
           db.close();
+
           localSongRemoved = true;
           removeFromCollections(activeTrackId);
           location.reload();
@@ -297,7 +302,7 @@
       });
     })();
 
-    // Safari-only cleanup for the duplicate offline audio downloaded before the Home Screen app was installed.
+    // Safari-only cleanup for audio downloaded in the separate Safari storage container.
     (() => {
       const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
       if (isStandalone) return;
@@ -307,27 +312,17 @@
 
       clearBtn.addEventListener('click', async () => {
         const confirmed = confirm(
-          'Remove the old Safari offline song downloads?\n\n' +
-          'This clears only Safari’s duplicate offline audio. It does NOT affect Google Drive or the installed MUSIC Home Screen app.'
+          'Remove Safari offline song downloads?\n\n' +
+          'This deletes Safari’s dedicated Lexi Music audio database. It does NOT affect Google Drive or the installed MUSIC Home Screen app.'
         );
         if (!confirmed) return;
 
         clearBtn.disabled = true;
         try {
-          const db = await new Promise((resolve, reject) => {
-            const request = indexedDB.open('music-pwa-db', 1);
-            request.onsuccess = () => resolve(request.result);
-            request.onerror = () => reject(request.error);
-          });
-          const transaction = db.transaction('audio', 'readwrite');
-          transaction.objectStore('audio').clear();
-          await new Promise((resolve, reject) => {
-            transaction.oncomplete = resolve;
-            transaction.onerror = () => reject(transaction.error);
-            transaction.onabort = () => reject(transaction.error || new Error('Cleanup was cancelled.'));
-          });
-          db.close();
-          alert('Safari duplicate offline downloads removed.');
+          if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
+          await window.LexiAudioStorage.ready;
+          await window.LexiAudioStorage.deleteDatabase();
+          alert('Safari offline downloads removed.');
           location.reload();
         } catch (error) {
           console.error(error);
@@ -339,13 +334,16 @@
   </script>
   <script src="metadata.js?v=1" defer></script>
   <script>
-    Promise.resolve(window.__musicSwUpdate).finally(() => {
+    Promise.all([
+      Promise.resolve(window.__musicSwUpdate),
+      Promise.resolve(window.LexiAudioStorage?.ready)
+    ]).finally(() => {
       const script = document.createElement('script');
       script.src = './app.js?v=17';
       script.defer = true;
       document.head.appendChild(script);
     });
   </script>
-  <script src="player-ui.js?v=6" defer></script>
+  <script src="player-ui.js?v=8" defer></script>
 </body>
 </html>
