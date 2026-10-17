@@ -1,7 +1,7 @@
-const CACHE = 'music-shell-v38';
-const OFFLINE_HTML = './index.html?v=25';
-const APP_JS = './app.js?v=17';
-const AUDIO_STORAGE_JS = './audio-storage.js?v=1';
+const CACHE = 'music-shell-v39';
+const OFFLINE_HTML = './index.html?v=26';
+const APP_JS = './app.js?v=18';
+const AUDIO_STORAGE_JS = './audio-storage.js?v=2';
 const META_JS = './metadata.js?v=1';
 const PLAYER_UI_JS = './player-ui.js?v=8';
 const PLAYLIST_JS = './playlist-enhancements.js?v=4';
@@ -35,7 +35,15 @@ self.addEventListener('fetch', event => {
   }
 
   // The page may still reference an older query-string version. Always serve
-  // the newest UI enhancement scripts from the active shell.
+  // the newest critical scripts from the active shell.
+  if (url.pathname.endsWith('/app.js')) {
+    event.respondWith(caches.match(APP_JS));
+    return;
+  }
+  if (url.pathname.endsWith('/audio-storage.js')) {
+    event.respondWith(caches.match(AUDIO_STORAGE_JS));
+    return;
+  }
   if (url.pathname.endsWith('/player-ui.js')) {
     event.respondWith(caches.match(PLAYER_UI_JS));
     return;
@@ -51,8 +59,6 @@ self.addEventListener('fetch', event => {
       caches.open(CACHE).then(cache => cache.put(req, copy));
       return res;
     }).catch(async () => {
-      if (url.pathname.endsWith('/app.js')) return caches.match(APP_JS);
-      if (url.pathname.endsWith('/audio-storage.js')) return caches.match(AUDIO_STORAGE_JS);
       if (url.pathname.endsWith('/metadata.js')) return caches.match(META_JS);
       if (url.pathname.endsWith('/styles.css')) return caches.match(STYLES);
       return caches.match(req);
