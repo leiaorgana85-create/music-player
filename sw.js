@@ -1,9 +1,9 @@
-const CACHE = 'music-shell-v39';
+const CACHE = 'music-shell-v40';
 const OFFLINE_HTML = './index.html?v=26';
 const APP_JS = './app.js?v=18';
 const AUDIO_STORAGE_JS = './audio-storage.js?v=2';
 const META_JS = './metadata.js?v=1';
-const PLAYER_UI_JS = './player-ui.js?v=8';
+const PLAYER_UI_JS = './player-ui.js?v=9';
 const PLAYLIST_JS = './playlist-enhancements.js?v=4';
 const STYLES = './styles.css?v=18';
 const SHELL = [OFFLINE_HTML, STYLES, APP_JS, AUDIO_STORAGE_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, './manifest.json'];
