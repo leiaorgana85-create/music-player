@@ -36,10 +36,11 @@
   // Compatibility bridge: existing Lexi Music code still asks music-pwa-db for
   // a single "audio" transaction. Route only that exact case to the separate
   // disposable audio database. Library and every other transaction stay on the
-  // original music-pwa-db unchanged.
+  // original music-pwa-db unchanged. Never fall back to the legacy audio store.
   IDBDatabase.prototype.transaction = function(storeNames, mode, options) {
     const names = typeof storeNames === 'string' ? [storeNames] : Array.from(storeNames || []);
-    if (this.name === LEGACY_DB_NAME && names.length === 1 && names[0] === AUDIO_STORE && audioDb) {
+    if (this.name === LEGACY_DB_NAME && names.length === 1 && names[0] === AUDIO_STORE) {
+      if (!audioDb) throw new DOMException('Dedicated offline audio storage is not ready.', 'InvalidStateError');
       return nativeTransaction.call(audioDb, AUDIO_STORE, mode, options);
     }
     return nativeTransaction.call(this, storeNames, mode, options);
