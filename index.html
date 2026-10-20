@@ -1,0 +1,311 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0c" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="MUSIC" />
+  <link rel="manifest" href="manifest.json?v=2" />
+  <link rel="apple-touch-icon" href="/lexi-assets/music-logo.png?v=2" />
+  <link rel="stylesheet" href="styles.css?v=20" />
+  <title>MUSIC</title>
+  <script src="./audio-storage-recovery.js?v=4"></script>
+  <script>
+    window.__musicBootStart = performance.now();
+    if ('serviceWorker' in navigator) {
+      navigator.serviceWorker.register('./sw.js').then(registration => {
+        registration.update().catch(error => console.warn('Service worker update unavailable', error));
+      }).catch(error => console.warn('Early service worker registration unavailable', error));
+    }
+  </script>
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <h1>LEXI MUSIC</h1>
+      </div>
+      <button id="settingsBtn" class="icon-btn" aria-label="Settings">⚙︎</button>
+    </header>
+
+    <section id="statusCard" class="status-card">
+      <div class="status-copy">
+        <div id="connectionLabel" class="status-title">Offline library</div>
+        <div id="statusDetail" class="status-detail">Loading saved songs…</div>
+      </div>
+      <div class="status-actions">
+        <button id="connectBtn" class="button secondary compact-button hidden">Connect</button>
+        <button id="refreshBtn" class="button compact-button">Refresh</button>
+        <button id="downloadAllBtn" class="button secondary compact-button">Download all</button>
+      </div>
+      <button id="clearSafariDownloadsBtn" class="button secondary compact-button hidden" style="width:100%; margin-top:6px;">Remove Safari downloads</button>
+    </section>
+
+    <nav id="tabs" class="tabs" aria-label="Library views">
+      <button class="tab" data-view="ALL">ALL</button>
+      <button class="tab" data-view="DOWNLOADED">↓ DOWNLOADED</button>
+      <button class="tab active" data-view="GYM">GYM</button>
+      <button class="tab" data-view="FEEL GOOD">FEEL GOOD</button>
+      <button class="tab" data-view="BOSSA">BOSSA</button>
+      <button class="tab" data-view="FAVORITES">♥ FAVORITES</button>
+    </nav>
+
+    <section class="search-row">
+      <input id="searchInput" type="search" placeholder="Search songs" autocomplete="off" />
+    </section>
+
+    <main>
+      <div id="viewHeader" class="view-header">
+        <div>
+          <h2 id="viewTitle">GYM</h2>
+          <div id="viewCount" class="muted">0 songs</div>
+        </div>
+        <div class="view-actions">
+          <button id="downloadViewBtn" class="small-control">Download view</button>
+          <button id="selectBtn" class="small-control">Select</button>
+          <button id="shuffleBtn" class="small-control" aria-pressed="true">Shuffle</button>
+        </div>
+      </div>
+
+      <div id="bulkBar" class="bulk-bar hidden">
+        <span id="selectedCount">0 selected</span>
+        <div class="bulk-actions">
+          <button id="bulkSelectAllBtn" class="button secondary compact-button">Select all</button>
+          <button id="bulkDeselectAllBtn" class="button secondary compact-button">Deselect all</button>
+          <button id="bulkAddBtn" class="button compact-button">Add to playlist</button>
+          <button id="bulkRemoveBtn" class="button secondary compact-button">Remove from playlist</button>
+          <button id="bulkRemoveDownloadBtn" class="button secondary compact-button hidden">Remove download</button>
+          <button id="bulkCancelBtn" class="button secondary compact-button">Cancel</button>
+        </div>
+      </div>
+
+      <div id="progressMessage" class="progress-message hidden"></div>
+      <div id="trackList" class="track-list"></div>
+      <div id="emptyState" class="empty-state hidden">No songs here yet.</div>
+    </main>
+  </div>
+
+  <section id="player" class="player hidden" aria-label="Now playing">
+    <div class="player-main">
+      <div class="player-text">
+        <div id="nowTitle" class="now-title">—</div>
+        <div id="nowMeta" class="now-meta hidden"></div>
+        <div id="nowStatus" class="now-status">—</div>
+      </div>
+      <div class="player-actions">
+        <button id="playerFavoriteBtn" class="player-action" aria-label="Add to Favorites">♡</button>
+        <button id="playerPlaylistBtn" class="player-action" aria-label="Playlist options">＋</button>
+      </div>
+    </div>
+    <input id="seek" class="seek" type="range" min="0" max="1000" value="0" />
+    <div class="player-controls">
+      <button id="prevBtn" class="transport" aria-label="Previous">⏮</button>
+      <button id="playBtn" class="transport primary-transport" aria-label="Play">▶</button>
+      <button id="nextBtn" class="transport" aria-label="Next">⏭</button>
+      <button id="repeatBtn" class="repeat" aria-label="Repeat all">↻ All</button>
+    </div>
+  </section>
+
+  <audio id="audio" preload="metadata" playsinline></audio>
+
+  <dialog id="playlistDialog" class="dialog">
+    <form method="dialog">
+      <div id="playlistDialogTitle" class="dialog-title">Song options</div>
+      <div class="dialog-section-label">Playlists</div>
+      <div id="playlistChoices" class="playlist-choices"></div>
+      <button id="removeDeviceBtn" type="button" class="button secondary hidden" style="width:100%; margin-top:16px;">Remove from device</button>
+      <div class="dialog-actions">
+        <button value="cancel" class="button secondary">Cancel</button>
+        <button id="savePlaylistsBtn" value="default" class="button">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <dialog id="settingsDialog" class="dialog">
+    <form method="dialog" id="settingsForm">
+      <div class="dialog-title">Drive setup</div>
+      <label class="field">
+        <span>Google OAuth Client ID</span>
+        <input id="clientIdInput" type="text" placeholder="123…apps.googleusercontent.com" />
+      </label>
+      <label class="field">
+        <span>Drive folder ID</span>
+        <input id="folderIdInput" type="text" />
+      </label>
+      <p class="help">A short-lived read-only Drive token is kept on this device until it expires. The Client ID and folder ID are also stored on this device.</p>
+      <div class="settings-section">
+        <div class="settings-section-title">Playlist backup</div>
+        <p class="help">Backs up GYM, FEEL GOOD, BOSSA, and Favorites. It does not copy or change downloaded audio.</p>
+        <div class="backup-actions">
+          <button id="exportBackupBtn" type="button" class="button secondary">Export backup</button>
+          <button id="importBackupBtn" type="button" class="button secondary">Import backup</button>
+          <input id="backupFileInput" class="hidden" type="file" accept="application/json,.json" />
+        </div>
+      </div>
+      <div class="dialog-actions">
+        <button value="cancel" class="button secondary">Cancel</button>
+        <button id="saveSettingsBtn" value="default" class="button">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <template id="trackTemplate">
+    <div class="track-row">
+      <button class="track-play" aria-label="Play or select">
+        <span class="track-index"></span>
+        <span class="play-glyph">▶</span>
+        <span class="select-glyph">○</span>
+      </button>
+      <button class="track-body">
+        <span class="track-title"></span>
+        <span class="track-meta"></span>
+      </button>
+      <button class="track-favorite" aria-label="Add to Favorites">♡</button>
+      <button class="track-menu" aria-label="Song options">⋯</button>
+      <span class="offline-badge" title="Downloaded for offline playback">↓</span>
+    </div>
+  </template>
+
+  <script>
+    (() => {
+      const key = 'musicPwaSettings';
+      const defaults = {
+        clientId: '543436064136-27a477uk691qocpaft25q925lg88hl98.apps.googleusercontent.com',
+        folderId: '1W8s8gT5p60nOqXv_VvPy6l9uofZAog9E'
+      };
+      try {
+        const saved = JSON.parse(localStorage.getItem(key) || '{}');
+        localStorage.setItem(key, JSON.stringify({
+          ...saved,
+          clientId: saved.clientId || defaults.clientId,
+          folderId: saved.folderId || defaults.folderId
+        }));
+      } catch {
+        localStorage.setItem(key, JSON.stringify(defaults));
+      }
+    })();
+
+    (() => {
+      const LIBRARY_KEY = 'musicPwaLibraryV2';
+      const PLAYLISTS_KEY = 'musicPwaPlaylists';
+      const CUSTOM_PLAYLISTS_KEY = 'musicPwaCustomPlaylists';
+      const FAVORITES_KEY = 'musicPwaFavorites';
+      const removeBtn = document.getElementById('removeDeviceBtn');
+      const playerPlaylistBtn = document.getElementById('playerPlaylistBtn');
+      let activeTrackId = null;
+      let activeTrackTitle = '';
+
+      function setActiveTrack(row) {
+        activeTrackId = row?.dataset?.id || null;
+        activeTrackTitle = row?.querySelector('.track-title')?.textContent?.trim() || 'this song';
+        removeBtn.classList.toggle('hidden', !activeTrackId);
+      }
+
+      document.addEventListener('click', event => {
+        const menu = event.target.closest('.track-menu');
+        if (menu) {
+          setActiveTrack(menu.closest('.track-row'));
+          return;
+        }
+        if (playerPlaylistBtn && event.target.closest('#playerPlaylistBtn')) {
+          setActiveTrack(document.querySelector('.track-row.playing'));
+        }
+      }, true);
+
+      function removeFromPlaylistStore(key, id) {
+        const saved = JSON.parse(localStorage.getItem(key) || '{}');
+        if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
+        for (const name of Object.keys(saved)) {
+          if (Array.isArray(saved[name])) saved[name] = saved[name].filter(trackId => trackId !== id);
+        }
+        localStorage.setItem(key, JSON.stringify(saved));
+      }
+
+      function removeFromCollections(id) {
+        removeFromPlaylistStore(PLAYLISTS_KEY, id);
+        removeFromPlaylistStore(CUSTOM_PLAYLISTS_KEY, id);
+        const favorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
+        if (Array.isArray(favorites)) {
+          localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites.filter(trackId => trackId !== id)));
+        }
+      }
+
+      removeBtn.addEventListener('click', async () => {
+        if (!activeTrackId) return;
+        const confirmed = confirm(
+          `Remove “${activeTrackTitle}” from this device?\n\n` +
+          'This deletes its local library entry, offline audio, playlist memberships, and Favorite status. It does NOT delete the Google Drive file. If the song is still in Drive, Refresh can add it back.'
+        );
+        if (!confirmed) return;
+
+        removeBtn.disabled = true;
+        try {
+          if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
+          await window.LexiAudioStorage.ready;
+          await window.LexiAudioStorage.deleteKey(activeTrackId);
+          const library = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]');
+          if (Array.isArray(library)) {
+            localStorage.setItem(LIBRARY_KEY, JSON.stringify(library.filter(track => track?.id !== activeTrackId)));
+          }
+          removeFromCollections(activeTrackId);
+          location.reload();
+        } catch (error) {
+          console.error(error);
+          alert('Could not remove this song from the device. Nothing else was changed.');
+          removeBtn.disabled = false;
+        }
+      });
+    })();
+
+    (() => {
+      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
+      if (isStandalone) return;
+      const clearBtn = document.getElementById('clearSafariDownloadsBtn');
+      if (!clearBtn) return;
+      clearBtn.classList.remove('hidden');
+
+      clearBtn.addEventListener('click', async () => {
+        const confirmed = confirm(
+          'Remove Safari offline song downloads?\n\n' +
+          'This deletes Safari’s dedicated Lexi Music audio database. It does NOT affect Google Drive or the installed MUSIC Home Screen app.'
+        );
+        if (!confirmed) return;
+
+        clearBtn.disabled = true;
+        try {
+          if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
+          await window.LexiAudioStorage.ready;
+          await window.LexiAudioStorage.deleteDatabase();
+          alert('Safari offline downloads removed.');
+          location.reload();
+        } catch (error) {
+          console.error(error);
+          alert('Could not remove the Safari downloads. Nothing else was changed.');
+          clearBtn.disabled = false;
+        }
+      });
+    })();
+  </script>
+  <script src="playback-prefetch.js?v=3"></script>
+  <script src="metadata.js?v=1" defer></script>
+  <script>
+    const audioStorageReady = window.LexiAudioStorage?.ready || Promise.reject(new Error('Offline audio storage module did not load.'));
+    audioStorageReady.then(() => {
+      const script = document.createElement('script');
+      script.src = './app-recovery.js?v=1';
+      script.defer = true;
+      document.head.appendChild(script);
+    }).catch(error => {
+      console.error(error);
+      const title = document.getElementById('connectionLabel');
+      const detail = document.getElementById('statusDetail');
+      if (title) title.textContent = 'Could not start app';
+      if (detail) detail.textContent = 'Music runtime could not initialize. Reload Lexi Music.';
+    });
+  </script>
+  <script src="player-ui.js?v=9" defer></script>
+  <script src="media-session-controls.js?v=5" defer></script>
+</body>
+</html>

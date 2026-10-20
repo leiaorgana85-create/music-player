@@ -1,0 +1,18 @@
+{
+  "id": "/music-player/",
+  "name": "Lexi Music",
+  "short_name": "Lexi Music",
+  "description": "Private Google Drive music player with offline iPhone playback.",
+  "start_url": "/music-player/",
+  "scope": "/music-player/",
+  "display": "standalone",
+  "background_color": "#0b0b0c",
+  "theme_color": "#0b0b0c",
+  "icons": [
+    {
+      "src": "/lexi-assets/music-logo.png?v=2",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

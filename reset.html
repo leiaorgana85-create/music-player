@@ -1,0 +1,144 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b0b0c" />
+  <title>Reset Lexi Music</title>
+  <style>
+    :root { color-scheme: dark; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
+    body { margin: 0; min-height: 100vh; background: #0b0b0c; color: #f3f3f4; display: grid; place-items: center; padding: 24px; box-sizing: border-box; }
+    main { width: min(420px, 100%); }
+    h1 { font-size: 22px; margin: 0 0 10px; }
+    p { color: #b9b9c0; line-height: 1.5; margin: 0; }
+    #detail { margin-top: 10px; font-size: 13px; }
+  </style>
+</head>
+<body>
+  <main>
+    <h1>Resetting Lexi Music…</h1>
+    <p id="status">Deleting all Lexi Music data stored on this device. Google Drive is not touched.</p>
+    <p id="detail"></p>
+  </main>
+  <script>
+    (() => {
+      'use strict';
+
+      const DB_NAMES = ['music-pwa-audio-db', 'music-pwa-db'];
+      const LOCAL_KEYS = [
+        'musicPwaSettings',
+        'musicPwaLibraryV2',
+        'musicPwaPlaylists',
+        'musicPwaCustomPlaylists',
+        'musicPwaFavorites',
+        'musicPwaGoogleAccessToken',
+        'musicPwaGoogleAuthorized',
+        'musicPwaGoogleForceConsent',
+        'musicPwaAudioIndexV1',
+        'musicPwaAudioIndexV2'
+      ];
+      const STATUS = document.getElementById('status');
+      const DETAIL = document.getElementById('detail');
+
+      function sleep(ms) {
+        return new Promise(resolve => setTimeout(resolve, ms));
+      }
+
+      function formatBytes(value) {
+        const n = Number(value || 0);
+        if (!Number.isFinite(n) || n <= 0) return '0 MB';
+        if (n >= 1024 ** 3) return `${(n / 1024 ** 3).toFixed(2)} GB`;
+        if (n >= 1024 ** 2) return `${(n / 1024 ** 2).toFixed(1)} MB`;
+        return `${Math.round(n / 1024)} KB`;
+      }
+
+      async function estimateUsage() {
+        try {
+          const estimate = await navigator.storage?.estimate?.();
+          return Number.isFinite(estimate?.usage) ? estimate.usage : null;
+        } catch {
+          return null;
+        }
+      }
+
+      function deleteDatabaseOnce(name) {
+        return new Promise((resolve, reject) => {
+          const request = indexedDB.deleteDatabase(name);
+          request.onsuccess = () => resolve();
+          request.onerror = () => reject(request.error || new Error(`Could not delete ${name}.`));
+          request.onblocked = () => reject(new Error(`${name} is still open.`));
+        });
+      }
+
+      async function deleteDatabase(name) {
+        let lastError = null;
+        for (let attempt = 0; attempt < 5; attempt += 1) {
+          try {
+            await deleteDatabaseOnce(name);
+            return;
+          } catch (error) {
+            lastError = error;
+            await sleep(150 * (attempt + 1));
+          }
+        }
+        throw lastError || new Error(`Could not delete ${name}.`);
+      }
+
+      async function reset() {
+        const before = await estimateUsage();
+
+        for (const name of DB_NAMES) {
+          DETAIL.textContent = `Deleting ${name}…`;
+          await deleteDatabase(name);
+        }
+
+        for (const key of LOCAL_KEYS) localStorage.removeItem(key);
+
+        for (let i = sessionStorage.length - 1; i >= 0; i -= 1) {
+          const key = sessionStorage.key(i);
+          if (key && /^music/i.test(key)) sessionStorage.removeItem(key);
+        }
+
+        if ('caches' in window) {
+          const cacheKeys = await caches.keys();
+          await Promise.all(
+            cacheKeys
+              .filter(key => key.startsWith('music-shell-'))
+              .map(key => caches.delete(key))
+          );
+        }
+
+        if ('serviceWorker' in navigator) {
+          try {
+            const registrations = await navigator.serviceWorker.getRegistrations();
+            const musicScope = `${location.origin}/music-player/`;
+            await Promise.all(
+              registrations
+                .filter(registration => registration.scope.startsWith(musicScope))
+                .map(registration => registration.unregister())
+            );
+          } catch {}
+        }
+
+        await sleep(600);
+        const after = await estimateUsage();
+        const beforeText = before == null ? 'unknown' : formatBytes(before);
+        const afterText = after == null ? 'unknown' : formatBytes(after);
+        const message = `Fresh start complete. Lexi Music local storage was deleted. WebKit storage: ${beforeText} → ${afterText}.`;
+
+        sessionStorage.setItem('musicFactoryResetVerified', message);
+        STATUS.textContent = 'Reset complete.';
+        DETAIL.textContent = message;
+        await sleep(700);
+        location.replace(`./?fresh=${Date.now()}`);
+      }
+
+      reset().catch(error => {
+        console.error(error);
+        STATUS.textContent = 'Reset could not finish.';
+        DETAIL.textContent = `${error?.message || 'Unknown storage error'} Close any other Lexi Music window, then open this page again.`;
+      });
+    })();
+  </script>
+</body>
+</html>
