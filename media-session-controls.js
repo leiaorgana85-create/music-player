@@ -32,6 +32,16 @@
     try { navigator.mediaSession.setActionHandler('nexttrack', nextTrack); } catch {}
   }
 
+  function loadFullscreenNowPlaying() {
+    if (document.querySelector('script[data-now-playing-fullscreen]')) return;
+    const script = document.createElement('script');
+    script.src = './now-playing-fullscreen.js?v=1';
+    script.defer = true;
+    script.dataset.nowPlayingFullscreen = '1';
+    document.head.appendChild(script);
+  }
+
+  loadFullscreenNowPlaying();
   window.addEventListener('load', installTrackControls);
   window.addEventListener('pageshow', installTrackControls);
   document.addEventListener('visibilitychange', () => {
