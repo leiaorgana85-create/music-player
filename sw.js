@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v73';
+const CACHE = 'music-shell-v74';
 const OFFLINE_HTML = './index.html?v=44';
 const APP_JS = './app-recovery.js?v=1';
 const AUDIO_STORAGE_JS = './audio-storage-recovery.js?v=4';
@@ -8,7 +8,7 @@ const META_JS = './metadata.js?v=1';
 const PLAYER_UI_JS = './player-ui.js?v=9';
 const PLAYLIST_JS = './playlist-enhancements.js?v=7';
 const MEDIA_CONTROLS_JS = './media-session-controls.js?v=5';
-const NOW_PLAYING_JS = './now-playing-fullscreen.js?v=1';
+const NOW_PLAYING_JS = './now-playing-fullscreen.js?v=2';
 const STYLES = './styles.css?v=20';
 const MANIFEST = './manifest.json?v=2';
 const SHELL = [OFFLINE_HTML, STYLES, APP_JS, AUDIO_STORAGE_JS, PREFETCH_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, MEDIA_CONTROLS_JS, NOW_PLAYING_JS, MANIFEST];
