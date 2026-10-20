@@ -35,7 +35,7 @@
   function loadFullscreenNowPlaying() {
     if (document.querySelector('script[data-now-playing-fullscreen]')) return;
     const script = document.createElement('script');
-    script.src = './now-playing-fullscreen.js?v=1';
+    script.src = './now-playing-fullscreen.js?v=2';
     script.defer = true;
     script.dataset.nowPlayingFullscreen = '1';
     document.head.appendChild(script);
