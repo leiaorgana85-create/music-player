@@ -33,11 +33,11 @@
   }
 
   function loadFullscreenNowPlaying() {
-    if (document.querySelector('script[data-now-playing-fullscreen]')) return;
+    if (document.querySelector('script[data-now-playing-fullscreen="2"]')) return;
     const script = document.createElement('script');
-    script.src = './now-playing-fullscreen.js?v=2';
+    script.src = './now-playing-fullscreen-v2.js';
     script.defer = true;
-    script.dataset.nowPlayingFullscreen = '1';
+    script.dataset.nowPlayingFullscreen = '2';
     document.head.appendChild(script);
   }
 
