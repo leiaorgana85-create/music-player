@@ -84,22 +84,28 @@
       min-height: 0;
       margin: 0 auto;
       display: grid;
+      grid-template-columns: minmax(0, 1fr);
       grid-template-rows: minmax(0, 1fr) 88px 48px;
       align-items: center;
-      justify-items: center;
+      justify-items: stretch;
       gap: 0;
       cursor: default;
+      position: relative;
     }
     .player.expanded .now-artwork-wrap {
       width: min(80vw, 40dvh, 330px);
       height: min(80vw, 40dvh, 330px);
-      flex: 0 0 auto;
+      flex: none;
       margin: 0;
       align-self: center;
-      justify-self: center;
+      justify-self: auto;
+      position: relative;
+      left: 50%;
+      transform: translateX(-50%);
       border-radius: 18px;
       box-shadow: 0 18px 46px rgba(0,0,0,.34);
     }
+    .player.expanded .now-artwork { object-position: 50% 50%; }
     .player.expanded .now-artwork-placeholder { font-size: 64px; }
     .player.expanded .player-text {
       width: 100%;
