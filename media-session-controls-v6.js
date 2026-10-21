@@ -1,6 +1,9 @@
 (() => {
   'use strict';
 
+  if (window.__lexiMediaControlsV6) return;
+  window.__lexiMediaControlsV6 = true;
+
   const audio = document.getElementById('audio');
   const prevBtn = document.getElementById('prevBtn');
   const nextBtn = document.getElementById('nextBtn');
