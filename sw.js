@@ -1,6 +1,6 @@
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v81';
-const OFFLINE_HTML = './index.html?v=47';
+const CACHE = 'music-shell-v82';
+const OFFLINE_HTML = './index.html?v=48';
 const APP_JS = './app-recovery.js?v=1';
 const AUDIO_STORAGE_JS = './audio-storage-recovery.js?v=4';
 const OFFLINE_MEDIA_JS = './offline-media-url.js?v=1';
@@ -10,7 +10,7 @@ const META_JS = './metadata.js?v=1';
 const PLAYER_UI_JS = './player-ui.js?v=9';
 const PLAYLIST_JS = './playlist-enhancements.js?v=7';
 const MEDIA_CONTROLS_JS = './media-session-controls.js?v=5';
-const MEDIA_CONTROLS_V6_JS = './media-session-controls-v6.js?v=3';
+const MEDIA_CONTROLS_V6_JS = './media-session-controls-v6.js?v=4';
 const NOW_PLAYING_V3_JS = './now-playing-fullscreen-v3.js';
 const STYLES = './styles.css?v=20';
 const MANIFEST = './manifest.json?v=2';
@@ -70,7 +70,7 @@ async function injectRuntime(response) {
     );
   }
   if (!html.includes('media-session-controls-v6.js')) {
-    html = html.replace('</body>', '  <script src="./media-session-controls-v6.js?v=3" defer></script>\n</body>');
+    html = html.replace('</body>', '  <script src="./media-session-controls-v6.js?v=4" defer></script>\n</body>');
   }
   return new Response(html, { status: response.status, statusText: response.statusText, headers });
 }
