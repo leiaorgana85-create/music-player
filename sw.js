@@ -1,5 +1,5 @@
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v79';
+const CACHE = 'music-shell-v80';
 const OFFLINE_HTML = './index.html?v=46';
 const APP_JS = './app-recovery.js?v=1';
 const AUDIO_STORAGE_JS = './audio-storage-recovery.js?v=4';
@@ -45,7 +45,7 @@ function criticalFallback(pathname) {
   return null;
 }
 
-async function injectMediaControls(response) {
+async function injectRuntime(response) {
   if (!response) return response;
   const type = response.headers.get('content-type') || '';
   if (!type.includes('text/html')) return response;
@@ -55,6 +55,12 @@ async function injectMediaControls(response) {
   headers.delete('content-encoding');
   headers.delete('etag');
   let html = text;
+  if (!html.includes('offline-media-url.js')) {
+    html = html.replace(
+      '<script src="playback-prefetch.js?v=3"></script>',
+      '  <script src="./offline-media-url.js?v=1"></script>\n  <script src="playback-prefetch.js?v=3"></script>'
+    );
+  }
   if (!html.includes('media-session-controls-v6.js')) {
     html = html.replace('</body>', '  <script src="./media-session-controls-v6.js?v=3" defer></script>\n</body>');
   }
@@ -162,9 +168,9 @@ self.addEventListener('fetch', event => {
   if (req.mode === 'navigate') {
     event.respondWith((async () => {
       try {
-        return await injectMediaControls(await fetch(req));
+        return await injectRuntime(await fetch(req));
       } catch {
-        return injectMediaControls(await caches.match(OFFLINE_HTML));
+        return injectRuntime(await caches.match(OFFLINE_HTML));
       }
     })());
     return;
