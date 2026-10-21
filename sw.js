@@ -1,10 +1,9 @@
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v82';
-const OFFLINE_HTML = './index.html?v=48';
+const CACHE = 'music-shell-v83';
+const OFFLINE_HTML = './index.html?v=49';
 const APP_JS = './app-recovery.js?v=1';
 const AUDIO_STORAGE_JS = './audio-storage-recovery.js?v=4';
 const OFFLINE_MEDIA_JS = './offline-media-url.js?v=1';
-const IOS_AUDIO_SESSION_JS = './ios-audio-session-recovery.js?v=1';
 const PREFETCH_JS = './playback-prefetch.js?v=3';
 const META_JS = './metadata.js?v=1';
 const PLAYER_UI_JS = './player-ui.js?v=9';
@@ -14,7 +13,7 @@ const MEDIA_CONTROLS_V6_JS = './media-session-controls-v6.js?v=4';
 const NOW_PLAYING_V3_JS = './now-playing-fullscreen-v3.js';
 const STYLES = './styles.css?v=20';
 const MANIFEST = './manifest.json?v=2';
-const SHELL = [OFFLINE_HTML, STYLES, APP_JS, AUDIO_STORAGE_JS, OFFLINE_MEDIA_JS, IOS_AUDIO_SESSION_JS, PREFETCH_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, MEDIA_CONTROLS_JS, MEDIA_CONTROLS_V6_JS, NOW_PLAYING_V3_JS, MANIFEST];
+const SHELL = [OFFLINE_HTML, STYLES, APP_JS, AUDIO_STORAGE_JS, OFFLINE_MEDIA_JS, PREFETCH_JS, META_JS, PLAYER_UI_JS, PLAYLIST_JS, MEDIA_CONTROLS_JS, MEDIA_CONTROLS_V6_JS, NOW_PLAYING_V3_JS, MANIFEST];
 
 const AUDIO_DB_NAME = 'music-pwa-audio-db';
 const AUDIO_STORE = 'audio';
@@ -37,7 +36,6 @@ function criticalFallback(pathname) {
   if (pathname.endsWith('/app-recovery.js')) return APP_JS;
   if (pathname.endsWith('/audio-storage-recovery.js')) return AUDIO_STORAGE_JS;
   if (pathname.endsWith('/offline-media-url.js')) return OFFLINE_MEDIA_JS;
-  if (pathname.endsWith('/ios-audio-session-recovery.js')) return IOS_AUDIO_SESSION_JS;
   if (pathname.endsWith('/playback-prefetch.js')) return PREFETCH_JS;
   if (pathname.endsWith('/player-ui.js')) return PLAYER_UI_JS;
   if (pathname.endsWith('/playlist-enhancements.js')) return PLAYLIST_JS;
@@ -63,14 +61,11 @@ async function injectRuntime(response) {
       '  <script src="./offline-media-url.js?v=1"></script>\n  <script src="playback-prefetch.js?v=3"></script>'
     );
   }
-  if (!html.includes('ios-audio-session-recovery.js')) {
-    html = html.replace(
-      '<script src="playback-prefetch.js?v=3"></script>',
-      '  <script src="./ios-audio-session-recovery.js?v=1"></script>\n  <script src="playback-prefetch.js?v=3"></script>'
-    );
-  }
+  html = html.replace(/\s*<script src="\.\/ios-audio-session-recovery\.js\?v=1"><\/script>\s*/g, '\n');
   if (!html.includes('media-session-controls-v6.js')) {
     html = html.replace('</body>', '  <script src="./media-session-controls-v6.js?v=4" defer></script>\n</body>');
+  } else {
+    html = html.replace(/media-session-controls-v6\.js\?v=\d+/g, 'media-session-controls-v6.js?v=4');
   }
   return new Response(html, { status: response.status, statusText: response.statusText, headers });
 }
