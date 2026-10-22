@@ -1,49 +1,24 @@
 (() => {
   'use strict';
+  if (window.__lexiAudioStoragePlayer) return;
+  window.__lexiAudioStoragePlayer = true;
 
   const AUDIO_DB_NAME = 'music-pwa-audio-db';
   const AUDIO_DB_VERSION = 1;
   const AUDIO_STORE = 'audio';
   const AUDIO_INDEX_KEY = 'musicPwaAudioIndexV2';
   const LEGACY_INDEX_KEY = 'musicPwaAudioIndexV1';
-  const LIBRARY_KEY = 'musicPwaLibraryV2';
-  const pendingAudioDeletes = new Set();
-  const originalStorageSetItem = Storage.prototype.setItem;
-  const originalStorageGetItem = Storage.prototype.getItem;
   let audioDb = null;
+  let opening = null;
   let deleteBarrier = false;
-
-  function parseLibrary(raw) {
-    try {
-      const parsed = JSON.parse(raw || '[]');
-      return Array.isArray(parsed) ? parsed : [];
-    } catch {
-      return [];
-    }
+  let operations = Promise.resolve();
+  function serialize(task) {
+    const run = () => navigator.locks?.request
+      ? navigator.locks.request('lexi-music-audio', task) : task();
+    const result = operations.then(run, run);
+    operations = result.catch(() => {});
+    return result;
   }
-
-  // app-recovery.js removes a Drive-deleted track from the local library even
-  // when its separate audio-row deletion throws. Preserve that library row
-  // while deletion is unverified so the next Refresh can retry cleanly instead
-  // of leaving an inaccessible audio blob behind.
-  Storage.prototype.setItem = function guardedStorageSetItem(key, value) {
-    if (this === localStorage && String(key) === LIBRARY_KEY && pendingAudioDeletes.size) {
-      const previous = parseLibrary(originalStorageGetItem.call(this, LIBRARY_KEY));
-      const next = parseLibrary(value);
-      const nextIds = new Set(next.map(track => String(track?.id || '')));
-
-      for (const id of pendingAudioDeletes) {
-        if (nextIds.has(id)) continue;
-        const priorTrack = previous.find(track => String(track?.id || '') === id);
-        if (priorTrack) {
-          next.push(priorTrack);
-          nextIds.add(id);
-        }
-      }
-      value = JSON.stringify(next);
-    }
-    return originalStorageSetItem.call(this, key, value);
-  };
 
   function isRecoverableDbError(error) {
     const name = String(error?.name || '');
@@ -61,7 +36,8 @@
 
   function openAudioDb() {
     if (audioDb) return Promise.resolve(audioDb);
-    return new Promise((resolve, reject) => {
+    if (opening) return opening;
+    opening = new Promise((resolve, reject) => {
       const request = indexedDB.open(AUDIO_DB_NAME, AUDIO_DB_VERSION);
       request.onupgradeneeded = () => {
         const db = request.result;
@@ -79,7 +55,8 @@
       };
       request.onerror = () => reject(request.error || new Error('Could not open offline audio storage.'));
       request.onblocked = () => reject(new Error('Offline audio storage is blocked by another open app window.'));
-    });
+    }).finally(() => { opening = null; });
+    return opening;
   }
 
   async function reopenAudioDb() {
@@ -111,9 +88,11 @@
       try {
         const db = await openAudioDb();
         const transaction = db.transaction(AUDIO_STORE, mode);
-        const request = makeRequest(transaction.objectStore(AUDIO_STORE));
-        const result = await requestPromise(request);
-        if (mode === 'readwrite') await finishTransaction(transaction);
+        const committed = finishTransaction(transaction);
+        let request;
+        try { request = makeRequest(transaction.objectStore(AUDIO_STORE)); }
+        catch (error) { try { transaction.abort(); } catch {} await committed.catch(() => {}); throw error; }
+        const [result] = await Promise.all([requestPromise(request), committed]);
         return result;
       } catch (error) {
         if (attempt === 0 && isRecoverableDbError(error)) {
@@ -146,14 +125,12 @@
   }
 
   function readIndex() {
-    const current = parseIndex(localStorage.getItem(AUDIO_INDEX_KEY));
-    if (Object.keys(current).length) return current;
+    const current = localStorage.getItem(AUDIO_INDEX_KEY);
+    if (current !== null) return parseIndex(current);
     const legacy = parseIndex(localStorage.getItem(LEGACY_INDEX_KEY));
-    if (Object.keys(legacy).length) {
-      localStorage.setItem(AUDIO_INDEX_KEY, JSON.stringify(legacy));
-      return legacy;
-    }
-    return {};
+    localStorage.setItem(AUDIO_INDEX_KEY, JSON.stringify(legacy));
+    localStorage.removeItem(LEGACY_INDEX_KEY);
+    return legacy;
   }
 
   function writeIndex(index) {
@@ -226,7 +203,6 @@
 
   async function deleteKey(id) {
     const key = String(id || '');
-    if (key) pendingAudioDeletes.add(key);
 
     let lastError = null;
     for (let attempt = 0; attempt < 3; attempt += 1) {
@@ -235,7 +211,6 @@
         const remaining = await runRequest('readonly', store => store.get(id));
         if (!remaining) {
           removeIndex(id);
-          if (key) pendingAudioDeletes.delete(key);
           return;
         }
         lastError = new Error('Offline audio row still exists after deletion.');
@@ -282,7 +257,6 @@
       });
       localStorage.removeItem(AUDIO_INDEX_KEY);
       localStorage.removeItem(LEGACY_INDEX_KEY);
-      pendingAudioDeletes.clear();
 
       await openAudioDb();
       const actual = await readActualStats();
@@ -290,9 +264,8 @@
         throw new Error(`Offline audio database verification failed: ${actual.rowCount} row(s) remain.`);
       }
       return { count: 0, bytes: 0, rowCount: 0 };
-    } catch (error) {
+    } finally {
       deleteBarrier = false;
-      throw error;
     }
   }
 
@@ -302,14 +275,14 @@
     indexKey: AUDIO_INDEX_KEY,
     ready,
     getIndex,
-    getAll,
-    getAllKeys,
-    verifyIndexedAudio,
-    get,
-    put,
-    deleteKey,
-    readStats,
-    readActualStats,
-    deleteDatabase
+    getAll: (...args) => serialize(() => getAll(...args)),
+    getAllKeys: (...args) => serialize(() => getAllKeys(...args)),
+    verifyIndexedAudio: (...args) => serialize(() => verifyIndexedAudio(...args)),
+    get: (...args) => serialize(() => get(...args)),
+    put: (...args) => serialize(() => put(...args)),
+    deleteKey: (...args) => serialize(() => deleteKey(...args)),
+    readStats: (...args) => serialize(() => readStats(...args)),
+    readActualStats: (...args) => serialize(() => readActualStats(...args)),
+    deleteDatabase: (...args) => serialize(() => deleteDatabase(...args))
   };
 })();
