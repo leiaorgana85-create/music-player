@@ -208,7 +208,8 @@
     async function clearOfflineAudioStorage() {
       if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
       await window.LexiAudioStorage.ready;
-      return window.LexiAudioStorage.deleteDatabase();
+      if (!window.LexiMusic) throw new Error('Music is still starting.');
+      return window.LexiMusic.clearDownloads();
     }
 
     async function refreshSettingsStatus() {
@@ -337,10 +338,10 @@
 
   setupSettingsPanel();
 
+  // Compatibility for earlier HTML; current HTML declares the UI module directly.
   if (!document.querySelector('script[data-playlist-enhancements]')) {
     const script = document.createElement('script');
-    script.src = './playlist-enhancements.js?v=3';
-    script.defer = true;
+    script.src = './playlist-enhancements.js?v=7';
     script.dataset.playlistEnhancements = '1';
     document.head.appendChild(script);
   }

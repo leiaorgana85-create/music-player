@@ -11,7 +11,7 @@
   <link rel="apple-touch-icon" href="/lexi-assets/music-logo.png?v=2" />
   <link rel="stylesheet" href="styles.css?v=20" />
   <title>MUSIC</title>
-  <script src="./audio-storage-recovery.js?v=4"></script>
+  <script src="./audio-storage-player.js?v=1"></script>
   <script>
     window.__musicBootStart = performance.now();
     if ('serviceWorker' in navigator) {
@@ -214,24 +214,6 @@
         }
       }, true);
 
-      function removeFromPlaylistStore(key, id) {
-        const saved = JSON.parse(localStorage.getItem(key) || '{}');
-        if (!saved || typeof saved !== 'object' || Array.isArray(saved)) return;
-        for (const name of Object.keys(saved)) {
-          if (Array.isArray(saved[name])) saved[name] = saved[name].filter(trackId => trackId !== id);
-        }
-        localStorage.setItem(key, JSON.stringify(saved));
-      }
-
-      function removeFromCollections(id) {
-        removeFromPlaylistStore(PLAYLISTS_KEY, id);
-        removeFromPlaylistStore(CUSTOM_PLAYLISTS_KEY, id);
-        const favorites = JSON.parse(localStorage.getItem(FAVORITES_KEY) || '[]');
-        if (Array.isArray(favorites)) {
-          localStorage.setItem(FAVORITES_KEY, JSON.stringify(favorites.filter(trackId => trackId !== id)));
-        }
-      }
-
       removeBtn.addEventListener('click', async () => {
         if (!activeTrackId) return;
         const confirmed = confirm(
@@ -242,14 +224,8 @@
 
         removeBtn.disabled = true;
         try {
-          if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
-          await window.LexiAudioStorage.ready;
-          await window.LexiAudioStorage.deleteKey(activeTrackId);
-          const library = JSON.parse(localStorage.getItem(LIBRARY_KEY) || '[]');
-          if (Array.isArray(library)) {
-            localStorage.setItem(LIBRARY_KEY, JSON.stringify(library.filter(track => track?.id !== activeTrackId)));
-          }
-          removeFromCollections(activeTrackId);
+          if (!window.LexiMusic) throw new Error('Music is still starting.');
+          await window.LexiMusic.removeFromDevice(activeTrackId);
           location.reload();
         } catch (error) {
           console.error(error);
@@ -259,53 +235,11 @@
       });
     })();
 
-    (() => {
-      const isStandalone = window.matchMedia('(display-mode: standalone)').matches || window.navigator.standalone === true;
-      if (isStandalone) return;
-      const clearBtn = document.getElementById('clearSafariDownloadsBtn');
-      if (!clearBtn) return;
-      clearBtn.classList.remove('hidden');
-
-      clearBtn.addEventListener('click', async () => {
-        const confirmed = confirm(
-          'Remove Safari offline song downloads?\n\n' +
-          'This deletes Safari’s dedicated Lexi Music audio database. It does NOT affect Google Drive or the installed MUSIC Home Screen app.'
-        );
-        if (!confirmed) return;
-
-        clearBtn.disabled = true;
-        try {
-          if (!window.LexiAudioStorage) throw new Error('Offline audio storage module is unavailable.');
-          await window.LexiAudioStorage.ready;
-          await window.LexiAudioStorage.deleteDatabase();
-          alert('Safari offline downloads removed.');
-          location.reload();
-        } catch (error) {
-          console.error(error);
-          alert('Could not remove the Safari downloads. Nothing else was changed.');
-          clearBtn.disabled = false;
-        }
-      });
-    })();
   </script>
-  <script src="playback-prefetch.js?v=3"></script>
   <script src="metadata.js?v=1" defer></script>
-  <script>
-    const audioStorageReady = window.LexiAudioStorage?.ready || Promise.reject(new Error('Offline audio storage module did not load.'));
-    audioStorageReady.then(() => {
-      const script = document.createElement('script');
-      script.src = './app-recovery.js?v=1';
-      script.defer = true;
-      document.head.appendChild(script);
-    }).catch(error => {
-      console.error(error);
-      const title = document.getElementById('connectionLabel');
-      const detail = document.getElementById('statusDetail');
-      if (title) title.textContent = 'Could not start app';
-      if (detail) detail.textContent = 'Music runtime could not initialize. Reload Lexi Music.';
-    });
-  </script>
-  <script src="player-ui.js?v=9" defer></script>
-  <script src="media-session-controls.js?v=5" defer></script>
+  <script src="app-player.js?v=1" data-lexi-music-player="1" defer></script>
+  <script src="player-ui.js?v=10" defer></script>
+  <script src="playlist-enhancements.js?v=7" data-playlist-enhancements="1" defer></script>
+  <script src="now-playing-fullscreen-v3.js" defer></script>
 </body>
 </html>
