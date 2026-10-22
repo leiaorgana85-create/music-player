@@ -1,1 +1,1 @@
-(() => { if (window.__lexiMusicPlayer || document.querySelector('script[data-lexi-music-player]')) return; const s = document.createElement('script'); s.src = './app-player.js?v=1'; s.dataset.lexiMusicPlayer = '1'; document.head.appendChild(s); })();
+(() => { if (window.__lexiMusicPlayer || document.querySelector('script[data-lexi-music-player]')) return; const s = document.createElement('script'); s.src = './app-player.js?v=2'; s.dataset.lexiMusicPlayer = '1'; document.head.appendChild(s); })();
