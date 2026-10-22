@@ -1,10 +1,10 @@
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v86';
-const SHELL = ['./', './index.html', './styles.css?v=20', './app-player.js?v=2', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=1', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js', './manifest.json?v=2', './reset.html'];
+const CACHE = 'music-shell-v87';
+const SHELL = ['./', './index.html', './styles.css?v=20', './app-player.js?v=3', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=1', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js', './manifest.json?v=2', './reset.html'];
 const ALIASES = {
-  'app-recovery.js': './app-player.js?v=2',
+  'app-recovery.js': './app-player.js?v=3',
   'audio-storage-recovery.js': './audio-storage-player.js?v=1',
-  'app-player.js': './app-player.js?v=2',
+  'app-player.js': './app-player.js?v=3',
   'audio-storage-player.js': './audio-storage-player.js?v=1',
   'playback-prefetch.js': './playback-prefetch.js',
   'player-settings.js': './player-settings.js?v=1',

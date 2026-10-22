@@ -62,6 +62,7 @@
   let currentTrackId = null;
   let currentObjectUrl = null;
   let currentArtworkUrl = null;
+  let currentArtworkMime = 'image/jpeg';
   let queue = [];
   let shuffle = true;
   let repeatMode = 'all';
@@ -801,14 +802,15 @@
   }
 
   function setCurrentArtwork(parsed) {
-    if (currentArtworkUrl) URL.revokeObjectURL(currentArtworkUrl);
-    currentArtworkUrl = null;
-    if (!parsed?.artwork?.bytes?.length) return null;
+    if (!parsed?.artwork?.bytes?.length) { currentArtworkUrl = null; currentArtworkMime = 'image/jpeg'; return null; }
     try {
-      currentArtworkUrl = URL.createObjectURL(new Blob([parsed.artwork.bytes], { type: parsed.artwork.mime || 'image/jpeg' }));
+      const mime = parsed.artwork.mime || 'image/jpeg';
+      const nextUrl = URL.createObjectURL(new Blob([parsed.artwork.bytes], { type: mime }));
+      currentArtworkUrl = nextUrl;
+      currentArtworkMime = mime;
       return currentArtworkUrl;
     } catch {
-      return null;
+      return currentArtworkUrl;
     }
   }
 
@@ -886,8 +888,7 @@
       els.nowMeta.classList.toggle('hidden', !els.nowMeta.textContent);
       els.nowStatus.textContent = 'Preparing audio…';
       els.player.classList.remove('hidden');
-      setCurrentArtwork({});
-      updateMediaSession(track, null);
+      updateMediaSession(track);
       render();
       const ready = playable(controller.signal);
       els.audio.load();
@@ -900,7 +901,7 @@
       els.nowStatus.textContent = source.stale ? 'Playing saved older copy' : source.offline ? 'Playing offline' : 'Playing from Drive';
       els.player.classList.remove('hidden');
       updatePlayerFavoriteButton();
-      updateMediaSession(track, null);
+      updateMediaSession(track);
       render();
       await els.audio.play();
       if (generation !== playbackGeneration) return null;
@@ -913,11 +914,14 @@
         : applyEmbeddedMetadata(track, source.blob, true);
       Promise.resolve(parse).then(parsed => {
         if (generation !== playbackGeneration) return;
+        const previousArtwork = currentArtworkUrl;
         const artwork = setCurrentArtwork(parsed);
         els.nowTitle.textContent = displayTitle(track);
         els.nowMeta.textContent = [displayArtist(track), displayAlbum(track)].filter(Boolean).join(' • ');
         els.nowMeta.classList.toggle('hidden', !els.nowMeta.textContent);
-        updateMediaSession(track, artwork, parsed?.artwork?.mime || 'image/jpeg');
+        updateMediaSession(track, artwork, currentArtworkMime);
+        // Keep the previous URL valid until replacement metadata is published.
+        if (previousArtwork && previousArtwork !== artwork) URL.revokeObjectURL(previousArtwork);
       }).catch(error => console.warn('Optional metadata unavailable', error));
       return true;
     } catch (error) {
@@ -946,7 +950,7 @@
     return playbackLoading || !els.audio.paused ? pausePlayback() : resumePlayback();
   }
 
-  function updateMediaSession(track, artworkUrl = currentArtworkUrl, artworkMime = 'image/jpeg') {
+  function updateMediaSession(track, artworkUrl = currentArtworkUrl, artworkMime = currentArtworkMime) {
     if (!('mediaSession' in navigator)) return;
     try {
       navigator.mediaSession.metadata = new MediaMetadata({
