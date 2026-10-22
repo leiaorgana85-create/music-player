@@ -2,6 +2,8 @@
   'use strict';
   if (window.__lexiMusicPlayer) return;
   window.__lexiMusicPlayer = true;
+  // Suppress retired media installers injected by a previously controlling worker.
+  window.__lexiMediaControlsV6 = true;
 
   const DEFAULT_FOLDER_ID = '1W8s8gT5p60nOqXv_VvPy6l9uofZAog9E';
   const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.readonly';
