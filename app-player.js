@@ -82,7 +82,7 @@
   function runDataOperation(task) {
     const run = async () => {
       dataBusy = true;
-      prefetched = null;
+      clearPrefetch();
       updateUtilityActions();
       try {
         library = readLibrary();
@@ -770,7 +770,7 @@
   }
 
   function buildQueue(trackId) {
-    prefetched = null;
+    clearPrefetch();
     let ids = currentTracks().map(track => track.id);
     if (!ids.includes(trackId)) ids = library.map(track => track.id);
     const rest = ids.filter(id => id !== trackId);
@@ -831,23 +831,10 @@
     currentObjectUrl = null;
   }
 
-  function playable(signal) {
-    return new Promise((resolve, reject) => {
-      const cleanup = () => {
-        clearTimeout(timer);
-        els.audio.removeEventListener('canplay', ready);
-        els.audio.removeEventListener('error', failed);
-        signal.removeEventListener('abort', cancelled);
-      };
-      const ready = () => { cleanup(); resolve(); };
-      const failed = () => { cleanup(); reject(new Error('This audio could not be decoded.')); };
-      const cancelled = () => { cleanup(); reject(new DOMException('Playback replaced', 'AbortError')); };
-      const timer = setTimeout(() => { cleanup(); reject(new Error('Audio preparation timed out. Try another song.')); }, 12000);
-      els.audio.addEventListener('canplay', ready);
-      els.audio.addEventListener('error', failed);
-      signal.addEventListener('abort', cancelled, { once: true });
-      if (signal.aborted) cancelled();
-    });
+  function tracePlayback(stage) { window.LexiMusicDiagnostics?.record(stage); }
+  function clearPrefetch() {
+    if (prefetched?.source?.url && prefetched.source.url !== currentObjectUrl) URL.revokeObjectURL(prefetched.source.url);
+    prefetched = null;
   }
 
   function warmNextTrack() {
@@ -856,8 +843,16 @@
     const id = queue[i + 1] || (repeatMode === 'all' ? queue[0] : null);
     if (!id || id === currentTrackId || !offlineIds.has(id) || prefetched?.id === id) return;
     // Core owns the exact queue; warm only one already-downloaded row.
-    const entry = { id, row: audioGet(id).catch(() => null) };
+    clearPrefetch();
+    const entry = { id, source: null, row: audioGet(id).catch(() => null) };
     prefetched = entry;
+    entry.row.then(row => {
+      if (prefetched !== entry || !row?.blob) return;
+      const stale = !audioRowIsCurrent(library.find(track => track.id === id), row);
+      if (stale && navigator.onLine && accessToken) return;
+      entry.source = {url:audioObjectUrl(row.blob),offline:true,stale,blob:row.blob};
+      tracePlayback('next-source-prepared');
+    }).catch(() => tracePlayback('next-source-preparation-failed'));
   }
 
   function claimPlaybackSession() {
@@ -872,6 +867,7 @@
     const track = library.find(item => item.id === id);
     if (!track) return false;
     if (!preserveQueue) buildQueue(id);
+    tracePlayback('track-request');
     const generation = ++playbackGeneration;
     playbackAbort?.abort();
     const controller = new AbortController();
@@ -883,7 +879,16 @@
     let source = null;
     let assigned = false;
     try {
-      source = await sourceForTrack(track, controller.signal);
+      if (prefetched?.id === id && prefetched.source) {
+        source = prefetched.source;
+        prefetched.source = null; // Ownership moves to the active audio source.
+        clearPrefetch();
+        tracePlayback('prepared-source-handoff');
+      } else {
+        tracePlayback('source-read-start');
+        source = await sourceForTrack(track, controller.signal);
+        tracePlayback('source-read-complete');
+      }
       if (generation !== playbackGeneration || !wantsPlayback) return null;
       const previousUrl = currentObjectUrl;
       currentObjectUrl = source.url;
@@ -898,9 +903,8 @@
       els.player.classList.remove('hidden');
       updateMediaSession(track);
       render();
-      const ready = playable(controller.signal);
-      els.audio.load();
-      await ready;
+      // src assignment starts native loading. play() requests playback directly;
+      // a background canplay callback must not gate the request.
       if (generation !== playbackGeneration || !wantsPlayback) return null;
       els.audio.currentTime = 0;
       els.nowTitle.textContent = displayTitle(track);
@@ -912,7 +916,9 @@
       updateMediaSession(track);
       render();
       claimPlaybackSession();
+      tracePlayback('play-request');
       await els.audio.play();
+      tracePlayback('play-resolved');
       if (generation !== playbackGeneration) return null;
       pendingTrackId = null;
       playbackLoading = false;
@@ -934,6 +940,7 @@
       }).catch(error => console.warn('Optional metadata unavailable', error));
       return true;
     } catch (error) {
+      tracePlayback('play-failed:' + (error.name || 'Error'));
       if (generation !== playbackGeneration || controller.signal.aborted) return null;
       pendingTrackId = null;
       playbackLoading = false;
@@ -1195,7 +1202,7 @@
     });
 
     els.shuffleBtn.addEventListener('click', () => {
-      prefetched = null;
+      clearPrefetch();
       shuffle = !shuffle;
       els.shuffleBtn.setAttribute('aria-pressed', String(shuffle));
       if (currentTrackId) {
@@ -1218,7 +1225,7 @@
 
     els.playBtn.addEventListener('click', togglePlayback);
     els.prevBtn.addEventListener('click', () => prevTrack(false));
-    els.nextBtn.addEventListener('click', () => nextTrack(false));
+    els.nextBtn.addEventListener('click', () => { tracePlayback('app-next'); nextTrack(false); });
     els.repeatBtn.addEventListener('click', cycleRepeat);
     els.playerFavoriteBtn.addEventListener('click', () => currentTrackId && toggleFavorite(currentTrackId));
     els.playerPlaylistBtn.addEventListener('click', () => currentTrackId && openPlaylistDialog([currentTrackId], 'single'));
@@ -1268,7 +1275,7 @@
 
   function installMediaControls() {
     if (!('mediaSession' in navigator)) return;
-    const actions = { play: resumePlayback, pause: pausePlayback, previoustrack: () => prevTrack(true), nexttrack: () => nextTrack(false), seekto: null, seekbackward: null, seekforward: null };
+    const actions = { play: resumePlayback, pause: pausePlayback, previoustrack: () => prevTrack(true), nexttrack: () => { tracePlayback('lockscreen-next'); return nextTrack(false); }, seekto: null, seekbackward: null, seekforward: null };
     for (const [action, handler] of Object.entries(actions)) { try { navigator.mediaSession.setActionHandler(action, handler); } catch {} }
   }
 
