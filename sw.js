@@ -1,13 +1,13 @@
 importScripts('./offline-audio.js?v=1');
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v91';
-const SHELL = ['./audio-deck.js?v=1', './offline-audio.js?v=1', './playback-diagnostics.js?v=3', './', './index.html', './styles.css?v=20', './app-player.js?v=7', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=2', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js?v=2', './manifest.json?v=2', './reset.html'];
+const CACHE = 'music-shell-v92';
+const SHELL = ['./audio-deck.js?v=2', './offline-audio.js?v=1', './playback-diagnostics.js?v=4', './', './index.html', './styles.css?v=20', './app-player.js?v=8', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=2', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js?v=2', './manifest.json?v=2', './reset.html'];
 const ALIASES = {
-  'audio-deck.js': './audio-deck.js?v=1',
-  'playback-diagnostics.js': './playback-diagnostics.js?v=3',
-  'app-recovery.js': './app-player.js?v=7',
+  'audio-deck.js': './audio-deck.js?v=2',
+  'playback-diagnostics.js': './playback-diagnostics.js?v=4',
+  'app-recovery.js': './app-player.js?v=8',
   'audio-storage-recovery.js': './audio-storage-player.js?v=1',
-  'app-player.js': './app-player.js?v=7',
+  'app-player.js': './app-player.js?v=8',
   'audio-storage-player.js': './audio-storage-player.js?v=1',
   'playback-prefetch.js': './playback-prefetch.js',
   'player-settings.js': './player-settings.js?v=2',

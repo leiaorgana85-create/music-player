@@ -890,9 +890,10 @@
     pendingTrackId = id;
     playbackLoading = true;
     wantsPlayback = true;
-    els.audio.pause();
+    if (!window.LexiMusicDeck?.canActivate(id)) els.audio.pause();
     let source = null;
     let assigned = false;
+    let retiredUrl = null;
     try {
       if (prefetched?.id === id && prefetched.source) {
         source = prefetched.source;
@@ -910,8 +911,9 @@
       currentTrackId = id;
       const adopted = window.LexiMusicDeck?.activate(id, source.url);
       if (!adopted) els.audio.src = source.url;
+      else if (previousUrl !== source.url) retiredUrl = previousUrl;
       assigned = true;
-      if (previousUrl && previousUrl !== source.url) URL.revokeObjectURL(previousUrl);
+      if (!adopted && previousUrl && previousUrl !== source.url) URL.revokeObjectURL(previousUrl);
       els.nowTitle.textContent = displayTitle(track);
       els.nowMeta.textContent = [displayArtist(track), displayAlbum(track)].filter(Boolean).join(' • ');
       els.nowMeta.classList.toggle('hidden', !els.nowMeta.textContent);
@@ -952,6 +954,7 @@
       tracePlayback('play-request');
       await els.audio.play();
       tracePlayback('play-resolved');
+      if (retiredUrl) { URL.revokeObjectURL(retiredUrl); retiredUrl = null; }
       if (generation !== playbackGeneration) return null;
       pendingTrackId = null;
       playbackLoading = false;
@@ -969,6 +972,7 @@
       return false;
     } finally {
       if (source && !assigned) URL.revokeObjectURL(source.url);
+      if (retiredUrl) URL.revokeObjectURL(retiredUrl);
     }
   }
 
