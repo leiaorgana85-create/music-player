@@ -860,6 +860,14 @@
     prefetched = entry;
   }
 
+  function claimPlaybackSession() {
+    // Declare music playback directly. Do not wrap play(), create a second
+    // audio element, or cycle ambient categories during a track handoff.
+    try { if (navigator.audioSession) navigator.audioSession.type = 'playback'; } catch {}
+    els.audio.muted = false;
+    installMediaControls();
+  }
+
   async function playTrack(id, preserveQueue = false) {
     const track = library.find(item => item.id === id);
     if (!track) return false;
@@ -903,6 +911,7 @@
       updatePlayerFavoriteButton();
       updateMediaSession(track);
       render();
+      claimPlaybackSession();
       await els.audio.play();
       if (generation !== playbackGeneration) return null;
       pendingTrackId = null;
@@ -942,6 +951,7 @@
     if (!currentTrackId || !els.audio.src) return playTrack(currentTrackId || library[0]?.id, !!currentTrackId);
     if (els.audio.readyState < 3 || els.audio.error) return playTrack(currentTrackId, true);
     wantsPlayback = true;
+    claimPlaybackSession();
     try { await els.audio.play(); }
     catch (error) { setStatus('Playback could not resume', error.message); }
   }
@@ -1263,6 +1273,7 @@
   }
 
   async function init() {
+    claimPlaybackSession();
     bindEvents();
     setupPlayerTimeline();
     updateRepeatButton();
