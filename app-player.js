@@ -288,6 +288,17 @@
     return { __musicBytes: await response.arrayBuffer(), type };
   }
 
+  function downloadedAudioUrl(track, value) {
+    const standalone = navigator.standalone === true || window.matchMedia?.('(display-mode: standalone)').matches;
+    const controller = navigator.serviceWorker?.controller;
+    if (standalone && controller && new URL(controller.scriptURL).pathname === '/music-player/sw.js') {
+      tracePlayback('source:local-media-url');
+      return new URL('./__offline_audio/' + encodeURIComponent(track.id), location.href).href;
+    }
+    tracePlayback('source:blob-fallback');
+    return audioObjectUrl(value);
+  }
+
   function audioObjectUrl(value) {
     if (value?.__musicBytes instanceof ArrayBuffer) {
       return URL.createObjectURL(new Blob([value.__musicBytes], { type: value.type || 'application/octet-stream' }));
@@ -785,10 +796,10 @@
     const cached = prefetched?.id === track.id ? await prefetched.row : await audioGet(track.id);
     signal?.throwIfAborted();
     if (audioRowIsCurrent(track, cached)) {
-      return { url: audioObjectUrl(cached.blob), offline: true, stale: false, blob: cached.blob };
+      return { url: downloadedAudioUrl(track, cached.blob), offline: true, stale: false, blob: cached.blob };
     }
     if (cached?.blob && (!navigator.onLine || !accessToken)) {
-      return { url: audioObjectUrl(cached.blob), offline: true, stale: true, blob: cached.blob };
+      return { url: downloadedAudioUrl(track, cached.blob), offline: true, stale: true, blob: cached.blob };
     }
     if (!navigator.onLine) throw new Error('This song is not downloaded. Connect to the internet or download it before the flight.');
     if (!accessToken) throw new Error('Tap Refresh first to connect Google Drive.');
@@ -850,7 +861,7 @@
       if (prefetched !== entry || !row?.blob) return;
       const stale = !audioRowIsCurrent(library.find(track => track.id === id), row);
       if (stale && navigator.onLine && accessToken) return;
-      entry.source = {url:audioObjectUrl(row.blob),offline:true,stale,blob:row.blob};
+      entry.source = {url:downloadedAudioUrl(library.find(track => track.id === id), row.blob),offline:true,stale,blob:row.blob};
       tracePlayback('next-source-prepared');
     }).catch(() => tracePlayback('next-source-preparation-failed'));
   }

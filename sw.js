@@ -1,11 +1,12 @@
+importScripts('./offline-audio.js?v=1');
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v89';
-const SHELL = ['./playback-diagnostics.js?v=1', './', './index.html', './styles.css?v=20', './app-player.js?v=5', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=1', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js', './manifest.json?v=2', './reset.html'];
+const CACHE = 'music-shell-v90';
+const SHELL = ['./offline-audio.js?v=1', './playback-diagnostics.js?v=2', './', './index.html', './styles.css?v=20', './app-player.js?v=6', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=1', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js', './manifest.json?v=2', './reset.html'];
 const ALIASES = {
-  'playback-diagnostics.js': './playback-diagnostics.js?v=1',
-  'app-recovery.js': './app-player.js?v=5',
+  'playback-diagnostics.js': './playback-diagnostics.js?v=2',
+  'app-recovery.js': './app-player.js?v=6',
   'audio-storage-recovery.js': './audio-storage-player.js?v=1',
-  'app-player.js': './app-player.js?v=5',
+  'app-player.js': './app-player.js?v=6',
   'audio-storage-player.js': './audio-storage-player.js?v=1',
   'playback-prefetch.js': './playback-prefetch.js',
   'player-settings.js': './player-settings.js?v=1',
@@ -33,7 +34,15 @@ self.addEventListener('fetch', event => {
   const req = event.request;
   const url = new URL(req.url);
   const scope = new URL(self.registration.scope);
-  if (req.method !== 'GET' || url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+  if (url.origin !== scope.origin || !url.pathname.startsWith(scope.pathname)) return;
+  const mediaPrefix = scope.pathname + '__offline_audio/';
+  if (url.pathname.startsWith(mediaPrefix)) {
+    if (req.method !== 'GET' && req.method !== 'HEAD') return;
+    let id;try { id = decodeURIComponent(url.pathname.slice(mediaPrefix.length)); } catch (_) { event.respondWith(new Response(null,{status:400})); return; }
+    event.respondWith(self.LexiOfflineAudio.handle(req,id));
+    return;
+  }
+  if (req.method !== 'GET') return;
   // No private Drive responses or sibling applications are cached here.
   event.respondWith((async () => {
     const cache = await caches.open(CACHE);
