@@ -3,7 +3,7 @@
 
   const player = document.getElementById('player');
   const playerMain = player?.querySelector('.player-main');
-  const audio = document.getElementById('audio');
+  const audio = window.LexiMusicAudio || document.getElementById('audio');
   const prevBtn = document.getElementById('prevBtn');
   const playBtn = document.getElementById('playBtn');
   const nextBtn = document.getElementById('nextBtn');

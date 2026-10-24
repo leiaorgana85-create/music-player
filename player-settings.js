@@ -2,7 +2,7 @@
   'use strict';
 
   const playerMain = document.querySelector('.player-main');
-  const audio = document.getElementById('audio');
+  const audio = window.LexiMusicAudio || document.getElementById('audio');
   const nowTitle = document.getElementById('nowTitle');
   if (!playerMain || !audio || !nowTitle) return;
 
@@ -62,6 +62,7 @@
     artworkWrap.classList.add('no-art');
   });
 
+  window.addEventListener('lexi-artwork-updated', syncArtwork);
   audio.addEventListener('play', syncArtwork);
   audio.addEventListener('loadedmetadata', syncArtwork);
   audio.addEventListener('durationchange', syncArtwork);

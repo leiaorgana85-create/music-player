@@ -23,7 +23,7 @@
 
   const els = Object.fromEntries([
     'audio','connectionLabel','statusDetail','connectBtn','refreshBtn','settingsBtn','searchInput','downloadAllBtn','tabs','viewTitle','viewCount','shuffleBtn','selectBtn','downloadViewBtn','bulkBar','selectedCount','bulkSelectAllBtn','bulkDeselectAllBtn','bulkAddBtn','bulkRemoveBtn','bulkRemoveDownloadBtn','bulkCancelBtn','progressMessage','trackList','emptyState','player','nowTitle','nowMeta','nowStatus','playerFavoriteBtn','playerPlaylistBtn','seek','prevBtn','playBtn','nextBtn','repeatBtn','playlistDialog','playlistDialogTitle','playlistChoices','savePlaylistsBtn','settingsDialog','settingsForm','clientIdInput','folderIdInput','exportBackupBtn','importBackupBtn','backupFileInput','saveSettingsBtn','trackTemplate'
-  ].map(id => [id, document.getElementById(id)]));
+  ].map(id => [id, id === 'audio' ? (window.LexiMusicAudio || document.getElementById(id)) : document.getElementById(id)]));
 
   function ensureSelectionControls() {
     if (!els.bulkBar || (els.bulkSelectAllBtn && els.bulkDeselectAllBtn)) return;
@@ -843,7 +843,8 @@
   }
 
   function tracePlayback(stage) { window.LexiMusicDiagnostics?.record(stage); }
-  function clearPrefetch() {
+  function clearPrefetch(keepMedia = false) {
+    if (!keepMedia) window.LexiMusicDeck?.clear();
     if (prefetched?.source?.url && prefetched.source.url !== currentObjectUrl) URL.revokeObjectURL(prefetched.source.url);
     prefetched = null;
   }
@@ -862,6 +863,9 @@
       const stale = !audioRowIsCurrent(library.find(track => track.id === id), row);
       if (stale && navigator.onLine && accessToken) return;
       entry.source = {url:downloadedAudioUrl(library.find(track => track.id === id), row.blob),offline:true,stale,blob:row.blob};
+      window.LexiMusicDeck?.prepare(id, entry.source.url);
+      entry.artwork = window.MusicMetadata?.parse(row.blob, library.find(track => track.id === id)?.mimeType || '', true).catch(() => null);
+      if (entry.artwork) entry.source.artwork = entry.artwork;
       tracePlayback('next-source-prepared');
     }).catch(() => tracePlayback('next-source-preparation-failed'));
   }
@@ -893,7 +897,7 @@
       if (prefetched?.id === id && prefetched.source) {
         source = prefetched.source;
         prefetched.source = null; // Ownership moves to the active audio source.
-        clearPrefetch();
+        clearPrefetch(true);
         tracePlayback('prepared-source-handoff');
       } else {
         tracePlayback('source-read-start');
@@ -904,7 +908,8 @@
       const previousUrl = currentObjectUrl;
       currentObjectUrl = source.url;
       currentTrackId = id;
-      els.audio.src = source.url;
+      const adopted = window.LexiMusicDeck?.activate(id, source.url);
+      if (!adopted) els.audio.src = source.url;
       assigned = true;
       if (previousUrl && previousUrl !== source.url) URL.revokeObjectURL(previousUrl);
       els.nowTitle.textContent = displayTitle(track);
@@ -927,17 +932,10 @@
       updateMediaSession(track);
       render();
       claimPlaybackSession();
-      tracePlayback('play-request');
-      await els.audio.play();
-      tracePlayback('play-resolved');
-      if (generation !== playbackGeneration) return null;
-      pendingTrackId = null;
-      playbackLoading = false;
-      warmNextTrack();
-      // Artwork and tags never delay audio handoff or replace newer metadata.
-      const parse = source.stale && window.MusicMetadata?.parse
+      // Publish artwork independently of a pending native play promise.
+      const parse = source.artwork || (source.stale && window.MusicMetadata?.parse
         ? window.MusicMetadata.parse(source.blob, track.mimeType || '', true)
-        : applyEmbeddedMetadata(track, source.blob, true);
+        : applyEmbeddedMetadata(track, source.blob, true));
       Promise.resolve(parse).then(parsed => {
         if (generation !== playbackGeneration) return;
         const previousArtwork = currentArtworkUrl;
@@ -946,9 +944,18 @@
         els.nowMeta.textContent = [displayArtist(track), displayAlbum(track)].filter(Boolean).join(' • ');
         els.nowMeta.classList.toggle('hidden', !els.nowMeta.textContent);
         updateMediaSession(track, artwork, currentArtworkMime);
+        window.dispatchEvent(new Event('lexi-artwork-updated'));
+        tracePlayback('artwork-published');
         // Keep the previous URL valid until replacement metadata is published.
         if (previousArtwork && previousArtwork !== artwork) URL.revokeObjectURL(previousArtwork);
       }).catch(error => console.warn('Optional metadata unavailable', error));
+      tracePlayback('play-request');
+      await els.audio.play();
+      tracePlayback('play-resolved');
+      if (generation !== playbackGeneration) return null;
+      pendingTrackId = null;
+      playbackLoading = false;
+      warmNextTrack();
       return true;
     } catch (error) {
       tracePlayback('play-failed:' + (error.name || 'Error'));

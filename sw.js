@@ -1,20 +1,21 @@
 importScripts('./offline-audio.js?v=1');
 const CACHE_PREFIX = 'music-shell-';
-const CACHE = 'music-shell-v90';
-const SHELL = ['./offline-audio.js?v=1', './playback-diagnostics.js?v=2', './', './index.html', './styles.css?v=20', './app-player.js?v=6', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=1', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js', './manifest.json?v=2', './reset.html'];
+const CACHE = 'music-shell-v91';
+const SHELL = ['./audio-deck.js?v=1', './offline-audio.js?v=1', './playback-diagnostics.js?v=3', './', './index.html', './styles.css?v=20', './app-player.js?v=7', './audio-storage-player.js?v=1', './metadata.js?v=1', './player-settings.js?v=2', './playlist-enhancements.js?v=7', './now-playing-fullscreen-v3.js?v=2', './manifest.json?v=2', './reset.html'];
 const ALIASES = {
-  'playback-diagnostics.js': './playback-diagnostics.js?v=2',
-  'app-recovery.js': './app-player.js?v=6',
+  'audio-deck.js': './audio-deck.js?v=1',
+  'playback-diagnostics.js': './playback-diagnostics.js?v=3',
+  'app-recovery.js': './app-player.js?v=7',
   'audio-storage-recovery.js': './audio-storage-player.js?v=1',
-  'app-player.js': './app-player.js?v=6',
+  'app-player.js': './app-player.js?v=7',
   'audio-storage-player.js': './audio-storage-player.js?v=1',
   'playback-prefetch.js': './playback-prefetch.js',
-  'player-settings.js': './player-settings.js?v=1',
-  'player-ui.js': './player-settings.js?v=1',
+  'player-settings.js': './player-settings.js?v=2',
+  'player-ui.js': './player-settings.js?v=2',
   'playlist-enhancements.js': './playlist-enhancements.js?v=7',
   'media-session-controls.js': './media-session-controls.js?v=5',
   'media-session-controls-v6.js': './media-session-controls-v6.js',
-  'now-playing-fullscreen-v3.js': './now-playing-fullscreen-v3.js',
+  'now-playing-fullscreen-v3.js': './now-playing-fullscreen-v3.js?v=2',
   'metadata.js': './metadata.js?v=1',
   'styles.css': './styles.css?v=20',
   'manifest.json': './manifest.json?v=2'
